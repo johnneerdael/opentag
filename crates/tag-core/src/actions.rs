@@ -1879,14 +1879,18 @@ pub fn import_mta_diagnostic(
     })
 }
 
-fn mta_escape(value: &str) -> Result<String, String> {
-    if value.contains(['\r', '\n']) {
+fn mta_escape(value: &str, opaque: bool) -> Result<String, String> {
+    if !opaque && value.contains(['\r', '\n']) {
         return Err("Line breaks cannot be stored in an .mta setting".into());
     }
     let chars: Vec<char> = value.chars().collect();
     let mut out = String::new();
     for (index, c) in chars.iter().enumerate() {
         match *c {
+            // Opaque records already accepted these escaped values on import.
+            // Preserve them without assigning executable semantics to the action.
+            '\r' => out.push_str("\\x0d"),
+            '\n' => out.push_str("\\x0a"),
             // A backslash stays literal unless the importer would read it as
             // the start of an escape sequence (including one written below).
             '\\' if chars.get(index + 1).is_some_and(|next| {
@@ -1907,8 +1911,9 @@ fn mta_escape(value: &str) -> Result<String, String> {
     Ok(out)
 }
 /// Serialize a group in the `.mta` layout [`import_mta`] reads: every action
-/// type, preserved unresolved records written back unchanged. Settings that
-/// cannot be stored (line breaks) are refused.
+/// type, preserving decoded properties of unresolved records. Line breaks in
+/// opaque values use the existing escape grammar; resolved actions still refuse
+/// line breaks because their original serialized semantics are unqualified.
 pub fn export_mta(group: &ActionGroup) -> Result<String, String> {
     if group.actions.is_empty() {
         return Err("Action group contains no actions".into());
@@ -2127,8 +2132,9 @@ pub fn export_mta(group: &ActionGroup) -> Result<String, String> {
             }
         };
         out.push_str(&format!("[#{index}]\r\n"));
+        let opaque = matches!(action, ActionSpec::UnresolvedMta { .. });
         for (key, value) in settings {
-            out.push_str(&format!("{key}={}\r\n", mta_escape(&value)?));
+            out.push_str(&format!("{key}={}\r\n", mta_escape(&value, opaque)?));
         }
         out.push_str("\r\n");
     }

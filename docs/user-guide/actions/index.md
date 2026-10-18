@@ -159,8 +159,18 @@ Replace or correct that action explicitly; importing a file is not proof
 that every setting has an equivalent in TagGroove.
 
 Choose **Export .mta…** for the selected group to write an exchange file.
-Only supported export mappings can be written; review any reported error
-rather than assuming a partial export is usable.
+Review any reported error rather than assuming a partial export is usable.
+Unresolved imported actions can be exported for preservation: their decoded
+settings survive export and re-import, including encoded line breaks. Literal
+backslash sequences remain literal text. The action stays unresolved and its
+group stays disabled on re-import; export does not assign a supported meaning
+to unknown settings.
+
+This preserves setting values, not the original file's exact bytes: section
+numbers, property order, encoding and escape spellings can change. Keep the
+original `.mta` file when its exact form matters. Settings containing actual
+line breaks in recognized actions still report an export error. Acceptance
+by the original app for an unknown action or option remains unqualified.
 
 ## Keyboard controls in the group list
 
