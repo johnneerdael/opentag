@@ -46,7 +46,8 @@ mod android {
             // Tauri app_data_dir is Android dataDir, not Context.filesDir.
             // Resolve the actual allowed persistent root through the bridge.
             let root = app.documents().storage_root()?.join("documents-v1");
-            let store = engine::Store::open(&root, Bridge(app.clone()))?;
+            let store =
+                engine::Store::open(&root, Bridge(app.clone()), crate::settings::tag_options)?;
             STORE
                 .set(Mutex::new(store))
                 .map_err(|_| "Document store initialized concurrently")?;

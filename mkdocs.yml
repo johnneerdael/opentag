@@ -337,6 +337,7 @@ nav:
   - macOS: platforms/macos.md
   - Windows: platforms/windows.md
   - Linux: platforms/linux.md
+  - Android: platforms/android.md
 
 - Help:
   - Frequently asked questions: help/faq.md

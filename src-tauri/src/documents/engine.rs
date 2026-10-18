@@ -41,6 +41,7 @@ pub(super) struct Store<P> {
     root: PathBuf,
     provider: P,
     records: BTreeMap<String, Record>,
+    read_options: fn() -> tag_core::TagOptions,
 }
 fn error(e: impl std::fmt::Display) -> String {
     e.to_string()
@@ -130,7 +131,11 @@ fn replace_from(source: &Path, target: &Path) -> Result<()> {
     sync_dir(parent)
 }
 impl<P: Provider> Store<P> {
-    pub(super) fn open(root: &Path, provider: P) -> Result<Self> {
+    pub(super) fn open(
+        root: &Path,
+        provider: P,
+        read_options: fn() -> tag_core::TagOptions,
+    ) -> Result<Self> {
         fs::create_dir_all(root).map_err(error)?;
         if fs::symlink_metadata(root)
             .map_err(error)?
@@ -145,6 +150,7 @@ impl<P: Provider> Store<P> {
             root,
             provider,
             records: BTreeMap::new(),
+            read_options,
         };
         for item in fs::read_dir(&store.root).map_err(error)? {
             let item = item.map_err(error)?;
@@ -358,11 +364,14 @@ impl<P: Provider> Store<P> {
     fn entry(&self, record: &Record) -> Result<AudioEntry> {
         let working = self.working(record);
         self.checked(&working, true)?;
-        let mut entry = tag_core::read_entry(&working).or_else(|working_error| {
+        let options = (self.read_options)();
+        let read =
+            |path: &Path| tag_core::read_entry_with_options(path, &options.mappings, &options);
+        let mut entry = read(&working).or_else(|working_error| {
             if matches!(record.state, Phase::Ready) {
                 return Err(working_error);
             }
-            tag_core::read_entry(&self.valid_baseline(record)?).map_err(|e| {
+            read(&self.valid_baseline(record)?).map_err(|e| {
                 format!("Edited copy could not be read ({working_error}); backup: {e}")
             })
         })?;
@@ -443,7 +452,9 @@ impl<P: Provider> Store<P> {
         let record = self.record(path)?;
         let working = self.working(&record);
         self.checked(&working, false)?;
-        let mut entry = tag_core::read_entry_summary(&working)?;
+        let options = (self.read_options)();
+        let mut entry =
+            tag_core::read_entry_summary_with_options(&working, &options.mappings, &options)?;
         project_entry(&mut entry, &record.document);
         Ok(entry)
     }
@@ -459,7 +470,8 @@ impl<P: Provider> Store<P> {
             .provider
             .snapshot(&record.document.uri, &snapshot_path)?;
         self.verify(&snapshot, &record.document.uri, &snapshot_path)?;
-        tag_core::read_entry(&snapshot_path)?;
+        let options = (self.read_options)();
+        tag_core::read_entry_with_options(&snapshot_path, &options.mappings, &options)?;
         sync_file(&snapshot_path)?;
         sync_dir(snapshot_path.parent().ok_or("Missing baseline parent")?)?;
         record.state = Phase::Pending;
@@ -497,7 +509,8 @@ impl<P: Provider> Store<P> {
             "edited" => {
                 let path = self.working(&source);
                 self.checked(&path, false)?;
-                tag_core::read_entry(&path)?;
+                let options = (self.read_options)();
+                tag_core::read_entry_with_options(&path, &options.mappings, &options)?;
                 path
             }
             "original" => self.valid_baseline(&source)?,

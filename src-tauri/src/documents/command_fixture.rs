@@ -82,7 +82,8 @@ impl Session {
             sources: BTreeMap::from([(uri.clone(), (info.clone(), source.to_owned()))]),
             failure: false,
         })));
-        let mut store = engine::Store::open(root, provider.clone()).unwrap();
+        let mut store =
+            engine::Store::open(root, provider.clone(), crate::settings::tag_options).unwrap();
         let path = store.import(info).unwrap().path;
         STORES.lock().unwrap().push(store);
         Self {

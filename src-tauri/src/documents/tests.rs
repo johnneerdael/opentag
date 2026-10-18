@@ -126,6 +126,9 @@ struct Fixture {
 }
 impl Fixture {
     fn new(writable: bool) -> Self {
+        Self::with_options(writable, tag_core::TagOptions::default)
+    }
+    fn with_options(writable: bool, read_options: fn() -> tag_core::TagOptions) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("private");
         fs::create_dir(&root).unwrap();
@@ -144,7 +147,7 @@ impl Fixture {
             unavailable: Cell::new(false),
             workspace: root.clone(),
         }));
-        let store = Store::open(&root, files.clone()).unwrap();
+        let store = Store::open(&root, files.clone(), read_options).unwrap();
         Self {
             _dir: dir,
             root,
@@ -159,7 +162,7 @@ impl Fixture {
             .unwrap()
     }
     fn restart(&mut self) {
-        self.store = Store::open(&self.root, self.files.clone()).unwrap();
+        self.store = Store::open(&self.root, self.files.clone(), self.store.read_options).unwrap();
     }
     fn backups_contain(&self, bytes: &[u8]) -> bool {
         fn visit(dir: &Path, bytes: &[u8]) -> bool {
@@ -210,6 +213,200 @@ fn updates() -> Fields {
 }
 fn edit(path: &Path) -> Result<AudioEntry, String> {
     tag_core::write_fields(path, &updates())
+}
+
+fn mapped_id3_options() -> tag_core::TagOptions {
+    let mut options = tag_core::TagOptions::default();
+    options.mpeg.read_id3v1 = false;
+    options.mpeg.read_ape = false;
+    options.mappings.push(tag_core::UserFieldMapping {
+        tag_type: "ID3v2".into(),
+        source: "TITLE".into(),
+        target: "DISPLAY_TITLE".into(),
+    });
+    options
+}
+thread_local! {
+    // Keep fixture settings isolated per test thread; the store keeps one stable
+    // supplier while these values change, just as the settings-backed adapter does.
+    static CURRENT_READ_OPTIONS: RefCell<tag_core::TagOptions> = RefCell::default();
+}
+fn current_read_options() -> tag_core::TagOptions {
+    CURRENT_READ_OPTIONS.with(|options| options.borrow().clone())
+}
+fn seed_conflicting_mpeg(f: &mut Fixture) {
+    let path = f.files.path("content://test/source");
+    let mut frames = Vec::new();
+    for frame in 0..20u32 {
+        frames.extend([0xff, 0xfb, 0x90, 0x64]);
+        frames.extend((0..413u32).map(|i| ((i + frame * 7) % 200) as u8));
+    }
+    fs::write(&path, frames).unwrap();
+    let mut options = tag_core::TagOptions::default();
+    options.mpeg.write_id3v1 = false;
+    options.mpeg.remove_ape = false;
+    let values = |title: &str| BTreeMap::from([("TITLE".into(), vec![title.into()])]);
+    tag_core::write_fields_with_options(&path, &values("ID3 title"), false, &[], &options).unwrap();
+    options.mpeg.write_id3v2 = false;
+    options.mpeg.write_ape = true;
+    options.mpeg.remove_id3v2 = false;
+    tag_core::write_fields_with_options(&path, &values("APE title"), false, &[], &options).unwrap();
+    f.source = fs::read(&path).unwrap();
+    let mut documents = f.files.0.docs.borrow_mut();
+    let document = documents.get_mut("content://test/source").unwrap();
+    document.name = "mapped.mp3".into();
+    document.mime_type = Some("audio/mpeg".into());
+}
+
+#[test]
+fn provider_policy_import_reload_and_publish_use_selected_kind_and_mapping() {
+    let mut f = Fixture::with_options(true, mapped_id3_options);
+    seed_conflicting_mpeg(&mut f);
+    let source = f.source.clone();
+    // Establish that the carrier actually has competing readable kinds.
+    assert_eq!(
+        tag_core::read_entry(&f.files.path("content://test/source"))
+            .unwrap()
+            .fields["TITLE"],
+        ["APE title"]
+    );
+    let entry = f.import();
+    assert_eq!(
+        entry.fields.get("DISPLAY_TITLE"),
+        Some(&vec!["ID3 title".into()])
+    );
+    assert!(!entry.fields.contains_key("TITLE"));
+    assert_eq!(entry.technical["_PATH"], ["content://test/source"]);
+    assert_eq!(
+        fs::read(f.files.path("content://test/source")).unwrap(),
+        source
+    );
+    let reloaded = f.store.reload(Path::new(&entry.path)).unwrap();
+    assert_eq!(reloaded.fields, entry.fields);
+    assert_eq!(
+        fs::read(f.files.path("content://test/source")).unwrap(),
+        source
+    );
+    let mut write = mapped_id3_options();
+    write.mpeg.write_id3v1 = false;
+    write.mpeg.remove_ape = false;
+    let edited = f
+        .store
+        .mutate(Path::new(&entry.path), |path| {
+            tag_core::write_fields_with_options(
+                path,
+                &BTreeMap::from([("DISPLAY_TITLE".into(), vec!["Changed".into()])]),
+                false,
+                &write.mappings,
+                &write,
+            )
+        })
+        .unwrap();
+    assert_eq!(
+        edited.fields.get("DISPLAY_TITLE"),
+        Some(&vec!["Changed".into()])
+    );
+    assert!(!edited.fields.contains_key("TITLE"));
+    assert_eq!(edited.technical["_PATH"], ["content://test/source"]);
+    assert_eq!(f.store.states()[&entry.path].state, "ready");
+}
+
+#[test]
+fn provider_policy_current_options_apply_to_existing_handles_and_recovery() {
+    CURRENT_READ_OPTIONS.with(|options| *options.borrow_mut() = tag_core::TagOptions::default());
+    let mut f = Fixture::with_options(true, current_read_options);
+    seed_conflicting_mpeg(&mut f);
+    let entry = f.import();
+    assert_eq!(entry.fields["TITLE"], ["APE title"]);
+    // A newly selected policy must affect a handle already imported under defaults.
+    CURRENT_READ_OPTIONS.with(|options| *options.borrow_mut() = mapped_id3_options());
+    let working = f.store.read_working(Path::new(&entry.path)).unwrap();
+    assert_eq!(
+        working.fields.get("DISPLAY_TITLE"),
+        Some(&vec!["ID3 title".into()])
+    );
+    assert!(!working.fields.contains_key("TITLE"));
+    fs::write(&entry.path, b"interrupted local write").unwrap();
+    f.files.0.unavailable.set(true);
+    f.restart();
+    let recovered = f.store.restore_recovery();
+    assert!(recovered.errors.is_empty(), "{:?}", recovered.errors);
+    assert_eq!(recovered.entries.len(), 1);
+    assert_eq!(
+        recovered.entries[0].fields.get("DISPLAY_TITLE"),
+        Some(&vec!["ID3 title".into()])
+    );
+    assert_eq!(
+        recovered.entries[0].technical["_PATH"],
+        ["content://test/source"]
+    );
+    assert_eq!(fs::read(&entry.path).unwrap(), b"interrupted local write");
+    assert_eq!(
+        fs::read(f.files.path("content://test/source")).unwrap(),
+        f.source
+    );
+}
+
+#[test]
+fn provider_policy_ape_family_uses_current_read_switches_and_ape_mapping() {
+    let mut options = tag_core::TagOptions::default();
+    options.ape.read_ape = false;
+    CURRENT_READ_OPTIONS.with(|current| *current.borrow_mut() = options);
+    let mut f = Fixture::with_options(true, current_read_options);
+    let path = f.files.path("content://test/source");
+    // A specification-derived WavPack block; no real-encoder/device claim.
+    let body = 2000u32;
+    let mut block = b"wvpk".to_vec();
+    block.extend((24 + body).to_le_bytes());
+    block.extend(0x410u16.to_le_bytes());
+    block.extend([0, 0]);
+    block.extend(44100u32.to_le_bytes());
+    block.extend(0u32.to_le_bytes());
+    block.extend(44100u32.to_le_bytes());
+    block.extend((1u32 | 0x800 | 0x1000 | (9 << 23)).to_le_bytes());
+    block.extend(0u32.to_le_bytes());
+    block.extend((0..body).map(|i| (i % 200) as u8));
+    fs::write(&path, block).unwrap();
+    let values = |title: &str| BTreeMap::from([("TITLE".into(), vec![title.into()])]);
+    let mut write = tag_core::TagOptions::default();
+    tag_core::write_fields_with_options(&path, &values("APE title"), false, &[], &write).unwrap();
+    write.ape.write_ape = false;
+    write.ape.write_id3v1 = true;
+    write.ape.remove_ape = false;
+    tag_core::write_fields_with_options(&path, &values("Legacy title"), false, &[], &write)
+        .unwrap();
+    f.source = fs::read(&path).unwrap();
+    {
+        let mut documents = f.files.0.docs.borrow_mut();
+        let document = documents.get_mut("content://test/source").unwrap();
+        document.name = "mapped.wv".into();
+        document.mime_type = Some("audio/wavpack".into());
+    }
+    assert_eq!(
+        tag_core::read_entry(&path).unwrap().fields["TITLE"],
+        ["APE title"]
+    );
+    let entry = f.import();
+    assert_eq!(
+        entry.fields.get("TITLE"),
+        Some(&vec!["Legacy title".into()])
+    );
+    let mut options = tag_core::TagOptions::default();
+    options.ape.read_id3v1 = false;
+    options.mappings.push(tag_core::UserFieldMapping {
+        tag_type: "APEv2".into(),
+        source: "TITLE".into(),
+        target: "ARCHIVE_TITLE".into(),
+    });
+    CURRENT_READ_OPTIONS.with(|current| *current.borrow_mut() = options);
+    let reloaded = f.store.reload(Path::new(&entry.path)).unwrap();
+    assert_eq!(
+        reloaded.fields.get("ARCHIVE_TITLE"),
+        Some(&vec!["APE title".into()])
+    );
+    assert!(!reloaded.fields.contains_key("TITLE"));
+    assert_eq!(reloaded.technical["_PATH"], ["content://test/source"]);
+    assert_eq!(fs::read(path).unwrap(), f.source);
 }
 
 #[test]
@@ -393,7 +590,7 @@ fn unsafe_provider_names_and_forged_manifest_paths_are_rejected() {
         serde_json::from_slice(&fs::read(&manifest).unwrap()).unwrap();
     json["baseline_leaf"] = serde_json::json!("../../provider/source");
     fs::write(manifest, serde_json::to_vec(&json).unwrap()).unwrap();
-    assert!(Store::open(&f.root, f.files.clone()).is_err());
+    assert!(Store::open(&f.root, f.files.clone(), f.store.read_options).is_err());
 }
 #[cfg(unix)]
 #[test]
@@ -410,7 +607,7 @@ fn symlinked_working_file_never_mutates_provider_or_external_target() {
         fs::read(f.files.path("content://test/source")).unwrap(),
         f.source
     );
-    assert!(Store::open(&f.root, f.files.clone()).is_err());
+    assert!(Store::open(&f.root, f.files.clone(), f.store.read_options).is_err());
 }
 
 #[test]
