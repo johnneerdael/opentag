@@ -44,14 +44,58 @@ export const TOOLBAR_COMMANDS:Record<string,ToolbarCommand>={
   'toggle-panel':{label:'Tag panel',hint:'Show or hide the tag panel (Ctrl Q)'},
   'toggle-filter':{label:'Filter',hint:'Show or hide the filter (F3)'},
   options:{label:'Options',hint:'Open the options (⌘/Ctrl O)'},
+  'file-copy':{label:'Copy files to…',icon:'⧉',hint:'Copy selected files to another folder without replacing existing files (⌘/Ctrl ⇧ C)'},
+  'file-move':{label:'Move files to…',icon:'↗',hint:'Move selected files to another folder without replacing existing files (⌘/Ctrl ⇧ V)'},
+  'file-delete':{label:'Delete files…',icon:'⌫',hint:'Move selected files to the system trash (⌘/Ctrl Del)'},
+  'file-delete-permanent':{label:'Delete files permanently…',icon:'×',hint:'Delete selected files from disk without the trash (⌘/Ctrl ⇧ Del)'},
+  'dir-add':{label:'Add directory…',icon:'＋',hint:'Add a folder to the file list (Ctrl H)'},
+  'dir-up':{label:'Upper directory',icon:'↑',hint:'Open the parent of the current directory (⌘/Ctrl ⇧ D)'},
+  'dir-back':{label:'Previous directory',icon:'←',hint:'Return to the previous working directory (Alt ←)'},
+  'dir-forward':{label:'Next directory',icon:'→',hint:'Return to the next working directory (Alt →)'},
+  'dir-favorite':{label:'Favorite directory',icon:'★',hint:'Open the first favorite directory (Ctrl M)'},
+  'dir-manage':{label:'Favorite directories…',hint:'Add, order and remove favorite directories'},
+  'select-all':{label:'Select all',icon:'✓',hint:'Select every visible file in the file list (⌘/Ctrl A)'},
+  'unselect-all':{label:'Unselect all',hint:'Clear the file selection (⌘/Ctrl U)'},
+  'invert-selection':{label:'Invert selection',hint:'Invert the selection in the visible file list (⌘/Ctrl ⇧ A)'},
+  'select-next':{label:'Select next file',hint:'Select the next file in the file list (⌘/Ctrl N)'},
+  'select-similar':{label:'Select similar files',hint:'Select files similar to the current selection (⌘/Ctrl G)'},
+  'select-next-similar':{label:'Select next similar files',hint:'Select the next group of similar files (⌘/Ctrl ⇧ G)'},
+  'remove-from-list':{label:'Remove from list',hint:'Remove selected rows from the list while keeping their files on disk'},
+  'clear-list':{label:'Clear list',hint:'Clear the file list while keeping the files on disk'},
+  'edit-cell':{label:'Edit in file list',hint:'Edit a selected file in the list, starting with its filename column when available (F2)'},
+  'add-cover':{label:'Add cover…',hint:'Add artwork to the selected files'},
+  'remove-cover':{label:'Remove cover',hint:'Remove artwork from the selected files'},
+  'playlist-selected':{label:'Playlist (selected files)',hint:'Create a playlist from the selected files'},
+  'playlist-load':{label:'Load playlist/cue sheet…',hint:'Load a playlist or cue sheet into the file list'},
+  'playlist-folders':{label:'Playlist per folder (all files)',hint:'Create one playlist per folder from all listed files (⌘/Ctrl ⇧ P)'},
+  'playlist-generate':{label:'Generate playlists…',hint:'Choose playlist grouping, names and paths before creating playlists'},
+  'source-discogs-release':{label:'Discogs Release ID',hint:'Tag sources: look up a Discogs release by its ID'},
+  'source-freedb':{label:'freedb',hint:'Tag sources: look up the selected files on gnudb'},
+  'source-local-freedb':{label:'freedb (local)',hint:'Tag sources: look up the selected files in a local freedb collection'},
+  'source-cover-freedb':{label:'Covers: freedb (gnudb)',hint:'Find cover artwork using the gnudb tag source'},
+  'source-cover-musicbrainz':{label:'Covers: MusicBrainz',hint:'Find cover artwork on MusicBrainz'},
+  'source-cover-discogs':{label:'Covers: Discogs',hint:'Find cover artwork on Discogs'},
+  'source-itunes':{label:'iTunes',hint:'Tag sources: look up the selected files on iTunes'},
+  'source-deezer':{label:'Deezer',hint:'Tag sources: look up the selected files on Deezer'},
+  'source-lastfm':{label:'Last.fm',hint:'Tag sources: look up the selected files on Last.fm'},
+  'source-acoustid':{label:'AcoustID',hint:'Tag sources: identify the selected files by their audio fingerprints'},
+  'source-lrclib':{label:'Lyrics: LRCLIB',hint:'Find lyrics for the selected files on LRCLIB'},
+  'source-cover-itunes':{label:'Covers: iTunes',hint:'Find cover artwork on iTunes'},
+  'source-cover-deezer':{label:'Covers: Deezer',hint:'Find cover artwork on Deezer'},
+  'source-cover-fanart':{label:'Covers: fanart.tv',hint:'Find cover artwork on fanart.tv'},
+  'source-last':{label:'Last tag source',hint:'Open the last tag source, including an installed web source (⌘/Ctrl I)'},
+  'source-last-quick':{label:'Last tag source (quick)',hint:'Search with the last built-in tag source using the selected files (⌘/Ctrl ⇧ I)'},
 };
 const shown=(id:string)=>({id,visible:true}),hidden=(id:string)=>({id,visible:false});
 let separators=0;const separator=(visible=true)=>({id:`${SEPARATOR}-${++separators}`,visible});
 export function defaultToolbar():ToolbarConfig{
   separators=0;
-  return{shown:true,items:[shown('folder'),shown('files'),separator(),shown('save'),shown('reload'),separator(),shown('filename-tags'),shown('tags-filename'),separator(),shown('groups'),shown('number'),
+  const items=[shown('folder'),shown('files'),separator(),shown('save'),shown('reload'),separator(),shown('filename-tags'),shown('tags-filename'),separator(),shown('groups'),shown('number'),
     hidden('undo'),hidden('redo'),hidden('remove-tags'),hidden('extended'),hidden('filename-filename'),hidden('text-tags'),hidden('tag-tag'),hidden('action'),hidden('playlist-all'),hidden('export-config'),hidden('find'),hidden('refresh'),
-    hidden('source-musicbrainz'),hidden('source-discogs'),hidden('cover-manage'),hidden('file-reveal'),hidden('file-play'),hidden('toggle-panel'),hidden('toggle-filter'),hidden('options')]};
+    hidden('source-musicbrainz'),hidden('source-discogs'),hidden('cover-manage'),hidden('file-reveal'),hidden('file-play'),hidden('toggle-panel'),hidden('toggle-filter'),hidden('options')];
+  const known=new Set(items.map(item=>item.id));
+  for(const id of Object.keys(TOOLBAR_COMMANDS))if(!known.has(id))items.push(hidden(id));
+  return{shown:true,items};
 }
 export const isSeparator=(id:string)=>id.startsWith(SEPARATOR);
 export const isSpacer=(id:string)=>id.startsWith(SPACER);

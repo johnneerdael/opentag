@@ -55,10 +55,20 @@ The customization list also offers the following built-in commands:
 | Task family | Other available buttons |
 | --- | --- |
 | Recover or remove | Undo, Redo, Remove tag |
-| Edit and convert | Extended tags, Filename → Filename, Text File → Tag, Tag → Tag, Quick action |
-| Output and inspect | Playlist, Export, Find, Refresh |
-| Sources and artwork | MusicBrainz, Discogs, Covers |
-| File access and workspace | Show in folder, Play, Tag panel, Filter, Options |
+| Edit and convert | Extended tags, Filename → Filename, Text File → Tag, Tag → Tag, Quick action, Edit in file list |
+| File operations | Copy files to…, Move files to…, Delete files…, Delete files permanently…, Show in folder, Play |
+| Directories | Add directory…, Upper directory, Previous directory, Next directory, Favorite directory, Favorite directories… |
+| Selection and list | Select all, Unselect all, Invert selection, Select next file, Select similar files, Select next similar files, Remove from list, Clear list, Find, Refresh |
+| Playlists and output | Playlist, Playlist (selected files), Load playlist/cue sheet…, Playlist per folder (all files), Generate playlists…, Export |
+| Sources | MusicBrainz, Discogs, Discogs Release ID, iTunes, Deezer, Last.fm, AcoustID, freedb, freedb (local), Lyrics: LRCLIB, Last tag source, Last tag source (quick) |
+| Artwork | Covers, Add cover…, Remove cover, Covers: freedb (gnudb), Covers: MusicBrainz, Covers: Discogs, Covers: iTunes, Covers: Deezer, Covers: fanart.tv |
+| Workspace | Tag panel, Filter, Options |
+
+New choices are appended **hidden** to the main-toolbar configuration. Existing
+button positions, custom labels and visibility stay intact, and the default
+visible eight commands stay the same. Open the customization dialog and check
+the commands to show. The custom toolbar offers the same catalog under
+**Commands**, without automatically adding anything to its saved list.
 
 These are toolbar labels, which can be shorter than their menu labels.
 **Redo** can invoke the available Repeat behavior when there is no recorded
@@ -66,6 +76,29 @@ redo step. The [menu reference](../reference/menus/index.md) and
 [action guide](../actions/index.md) explain the actual operations and their
 write timing. You do not need to show every button, and the menus stay
 available.
+
+## Arrange an album-cleanup workflow
+
+For example, add **Select all**, **Tag → Filename**, **Move files to…** and
+**Playlist (selected files)** to a custom toolbar. Save intended pending edits
+first. Select the practice album, preview its names through Tag → Filename,
+then use the ordinary Move destination picker and confirmation. Create the
+playlist from the intended selection afterward. Each button runs the same
+command as its menu entry, including its preview, confirmation, source-access
+and pending-edit rules.
+
+**Edit in file list** starts in an editable filename column when one is
+available; otherwise it opens the first editable column. It does not create a
+new rename mode. **Remove from list** and **Clear list** keep files on disk.
+**Delete files…** uses the system trash, while **Delete files permanently…**
+bypasses the trash. The existing confirmation preferences still apply.
+
+Source buttons open the existing source flows. A key-gated source such as
+AcoustID remains unavailable until the app has an applicable API key. Adding
+its button does not supply credentials or establish a successful provider
+lookup. **Last tag source** can reopen an installed web source; the quick
+variant uses the last built-in source. Toolbar customization does not import
+an original Mp3tag toolbar layout.
 
 ## Build a custom toolbar
 
