@@ -25,7 +25,7 @@ const {ToolsUI,toolsOptionsPage}=await load('tools.ts'),{installHelperMenus}=awa
 const {customizeToolbar,itemHint,itemLabel,userLabel,visibleItems,isSeparator,isSpacer,TOOLBAR_COMMANDS}=await load('toolbar.ts');
 const {copyAsTextDialog,UTILS}=await load('utils-ui.ts'),{PlaylistUI}=await load('playlist-ui.ts'),{openTagToTag}=await load('tag-tag-ui.ts');
 const {offerOpenOutputs,ExportUI}=await load('export-ui.ts');
-const {FileOpsUI,nameList,defaultDirectoryState}=await load('file-ops.ts');
+const {FileOpsUI,nameList,defaultDirectoryState,startupChoice}=await load('file-ops.ts');
 const {copiedMessage,pastePlan,copyTags}=await load('tag-clipboard.ts');
 const {cleanupText,libraryOptionsPage}=await load('library.ts');
 const {mappingOptionsPage}=await load('field-mapping.ts');
@@ -1942,3 +1942,57 @@ for(const [ending,newline] of [['LF','\n'],['CRLF','\r\n']]){
     assert.deepEqual(create(native,new Translator('en')).ask({parts:['Help','Title'],separator:'\n\n'},'Open files'),['Help\n\nTitle','Open files']);
   });
 }
+
+
+for(const locale of ['de','nl'])test(`${locale}: associated Move confirmation translates parts and preserves complete raw paths`,async()=>{
+  const translator=new Translator(locale,catalogs[locale]),calls=[];
+  const nativeSource=(await source('i18n/dialog.ts')).replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
+  const js=ts.transpileModule(nativeSource,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText;
+  const dialogs=new Function('dialog','t','translate','translationActive',`${js}\nreturn {ask};`)({ask:async(...args)=>{calls.push(args);return false;}},key=>translator.t(key),text=>translator.translate(text),()=>true);
+  const from='/Music/Help  $& {value}.lrc',to='/Dest/Title  $& {from}.lrc';
+  const host={mac:false,selection:()=>[{name:'Help',path:'/Music/Help.wav'}],openReason:()=>'',pickDirectories:async()=>['/Dest'],
+    preferences:()=>({associatedFiles:true}),run:async(_message,job)=>job(),
+    invoke:async(command)=>{assert.equal(command,'preview_transfer');return{plan_token:'reviewed',associated:[{from,to}]};},
+    confirm:(message,title)=>dialogs.ask(message,{title})};
+  await new FileOpsUI(host).operate('file-move');
+  assert.equal(calls.length,1);
+  const message=calls[0][0];
+  assert.ok(message.includes(from)&&message.includes(to),message);
+  assert.ok(message.includes(translator.t('Associated .lrc/.cdg files: {length}',{length:1})),message);
+  assert.ok(message.includes(translator.t('Associated file: {from} → {to}',{from,to})),message);
+  assert.notEqual(calls[0][1].title,'Move files');
+});
+
+
+test('actual Files options save and restore the companion policy through the compact page picker and main host',async()=>{
+  const p=page(),globals=Object.fromEntries(['CSS','getComputedStyle'].map(name=>[name,Object.getOwnPropertyDescriptor(globalThis,name)]));
+  p.window.happyDOM.setViewport({width:420,height:700});
+  Object.defineProperty(globalThis,'CSS',{configurable:true,value:p.window.CSS});
+  Object.defineProperty(globalThis,'getComputedStyle',{configurable:true,value:p.window.getComputedStyle.bind(p.window)});
+  try{
+    // Happy DOM requires whitespace after @media; browsers accept either spelling.
+    const style=p.window.document.createElement('style');style.textContent=(await source('style.css')).replaceAll('@media(', '@media (');p.window.document.head.append(style);
+    let settings=defaultSettings();
+    const response=()=>({settings:structuredClone(settings),defaults:defaultSettings(),warning:null});
+    const ui=new OptionsUI({load:async()=>response(),save:async value=>{settings=structuredClone(value);return response();},appearance:{get:()=> 'system',set:()=>{}},applied:()=>{}});
+    await ui.open('files');
+    assert.equal(p.window.getComputedStyle(p.body.querySelector('.options-tree')).display,'none');
+    assert.equal(p.window.getComputedStyle(p.body.querySelector('.options-page-select')).display,'block');
+    assert.equal(p.window.document.activeElement.id,'options-page-picker');
+    let control=p.body.querySelector('[data-option="pages.files.associated_files"]');
+    assert.equal(control.checked,false);
+    assert.equal(control.disabled,false);
+    control.checked=true;control.dispatchEvent(new p.window.Event('change',{bubbles:true}));
+    p.body.querySelector('#options-ok').click();await p.window.happyDOM.waitUntilComplete();
+    assert.equal(settings.pages.files.associated_files,true);
+    const captured=rendererVariable(parsed,'fileOps',{FileOpsUI:class{constructor(host){this.host=host;}},removeEntries:()=>{},macPlatform:false,optionsUI:ui,startupChoice});
+    assert.equal(captured.host.preferences().associatedFiles,true);
+    await ui.open('general');
+    const picker=p.body.querySelector('#options-page-picker');picker.value='files';picker.dispatchEvent(new p.window.Event('change',{bubbles:true}));
+    control=p.body.querySelector('[data-option="pages.files.associated_files"]');assert.equal(control.checked,true);
+    p.body.querySelector('#options-defaults').click();
+    assert.equal(p.body.querySelector('[data-option="pages.files.associated_files"]').checked,false);
+    p.body.querySelector('#options-ok').click();await p.window.happyDOM.waitUntilComplete();
+    assert.equal(captured.host.preferences().associatedFiles,false);
+  }finally{for(const [name,descriptor] of Object.entries(globals))if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];p.close();}
+});

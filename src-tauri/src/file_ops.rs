@@ -262,6 +262,7 @@ pub struct TransferResult {
     /// Moved files, in the same shape as rename results so the UI can re-key them.
     pub renamed: Vec<PathChange>,
     pub copied: Vec<PathChange>,
+    pub associated_renamed: Vec<PathChange>,
 }
 
 /// Map every source to `destination/<filename>` and validate the whole plan.
@@ -332,6 +333,7 @@ pub fn transfer(paths: &[String], destination: &Path, mode: TransferMode) -> Tra
         },
         renamed: vec![],
         copied: vec![],
+        associated_renamed: vec![],
     };
     let plan = match plan_transfer(paths, destination) {
         Ok(plan) => plan,
@@ -366,23 +368,136 @@ pub fn transfer(paths: &[String], destination: &Path, mode: TransferMode) -> Tra
     }
     output
 }
+#[derive(Serialize)]
+pub struct TransferPreview {
+    pub plan_token: String,
+    pub associated: Vec<crate::associated_files::Preview>,
+}
+fn transfer_key(destination: &str) -> String {
+    format!("move-associated\0{destination}")
+}
+fn preview_transfer_plan(paths: &[String], destination: &str) -> Result<TransferPreview, String> {
+    let targets = plan_transfer(paths, Path::new(destination)).map_err(|errors| {
+        errors
+            .into_iter()
+            .map(|e| format!("{}: {}", e.path, e.error))
+            .collect::<Vec<_>>()
+            .join("\n")
+    })?;
+    let plan = crate::associated_files::Plan::new(targets.clone(), true)?;
+    let associated = plan.preview();
+    let plan_token = crate::rename_plan::record_associated(
+        paths,
+        &transfer_key(destination),
+        targets.into_iter().map(|(_, target)| target).collect(),
+        Some(plan),
+    )?;
+    Ok(TransferPreview {
+        plan_token,
+        associated,
+    })
+}
+/// Freeze companion membership and bytes before the existing Move confirmation.
+#[tauri::command]
+pub async fn preview_transfer(
+    paths: Vec<String>,
+    destination: String,
+) -> Result<TransferPreview, String> {
+    super::io(move || {
+        super::reject_provider_operation(&paths, "Move")?;
+        super::reject_provider_operation(std::slice::from_ref(&destination), "Destination")?;
+        if !crate::associated_files::enabled() {
+            return Err("Enable associated files in Options → Files first".into());
+        }
+        preview_transfer_plan(&paths, &destination)
+    })
+    .await
+}
+fn transfer_reviewed(
+    paths: &[String],
+    destination: &str,
+    mode: TransferMode,
+    plan_token: Option<String>,
+    enabled: bool,
+) -> Result<TransferResult, String> {
+    if mode == TransferMode::Copy {
+        return Ok(transfer(paths, Path::new(destination), mode));
+    }
+    if !enabled && plan_token.is_none() {
+        return Ok(transfer(paths, Path::new(destination), mode));
+    }
+    let token = plan_token.ok_or("Preview the associated files before moving")?;
+    let (_, plan) =
+        crate::rename_plan::consume_associated(&token, paths, &transfer_key(destination))?;
+    if !enabled {
+        return Err("The associated-file policy changed; preview again".into());
+    }
+    let plan = plan.ok_or("The move preview has no associated-file plan")?;
+    let mut output = TransferResult {
+        result: ScanResult {
+            entries: vec![],
+            errors: vec![],
+        },
+        renamed: vec![],
+        copied: vec![],
+        associated_renamed: vec![],
+    };
+    for group in plan.groups {
+        let path = group.audio.source.clone();
+        match group.execute(&mut tag_core::operations::rename_no_clobber) {
+            Err(error) => output.result.errors.push(FileError { path, error }),
+            Ok(()) => {
+                output
+                    .associated_renamed
+                    .extend(group.associated.iter().map(|item| PathChange {
+                        from: item.source.clone(),
+                        to: item.target.to_string_lossy().into_owned(),
+                    }));
+                let to = group.audio.target.to_string_lossy().into_owned();
+                output.renamed.push(PathChange {
+                    from: path,
+                    to: to.clone(),
+                });
+                match crate::settings::read_summary(&group.audio.target) {
+                    Ok(entry) => output.result.entries.push(entry),
+                    Err(error) => output.result.errors.push(FileError { path: to, error }),
+                }
+            }
+        }
+    }
+    Ok(output)
+}
 #[tauri::command]
 pub async fn transfer_files(
     paths: Vec<String>,
     destination: String,
     mode: TransferMode,
+    plan_token: Option<String>,
 ) -> Result<TransferResult, String> {
     super::io(move || {
         super::reject_provider_operation(&paths, "Copy and move")?;
         super::reject_provider_operation(std::slice::from_ref(&destination), "Destination")?;
-        let output = transfer(&paths, Path::new(&destination), mode);
-        let moved: Vec<(String, String)> = output
-            .renamed
-            .iter()
-            .map(|r| (r.from.clone(), r.to.clone()))
-            .collect();
-        super::library::changed(&[], &moved, &[]);
-        Ok(output)
+        if mode == TransferMode::Move {
+            let mut targets = paths.clone();
+            if let Some(token) = &plan_token {
+                targets.extend(crate::rename_plan::associated_sources(
+                    token,
+                    &paths,
+                    &transfer_key(&destination),
+                )?);
+            }
+            super::history::record("Move files", None, &targets, || {
+                transfer_reviewed(
+                    &paths,
+                    &destination,
+                    mode,
+                    plan_token,
+                    crate::associated_files::enabled(),
+                )
+            })
+        } else {
+            Ok(transfer(&paths, Path::new(&destination), mode))
+        }
     })
     .await
 }
@@ -914,5 +1029,91 @@ mod tests {
         let absolute = std::env::temp_dir().join("a.mp3");
         let absolute = absolute.to_string_lossy().into_owned();
         assert_eq!(parse(&[&absolute]).unwrap().files, vec![absolute.clone()]);
+    }
+    #[test]
+    fn reviewed_move_freezes_membership_source_bytes_and_single_use_token() {
+        let (_dir, source, target, files) = fixture();
+        let destination = target.to_string_lossy().into_owned();
+        let lyric = source.join("one.lrc");
+        std::fs::write(&lyric, b"first").unwrap();
+        let review = preview_transfer_plan(&files, &destination).unwrap();
+        assert_eq!(review.associated.len(), 1);
+        std::fs::write(&lyric, b"other").unwrap();
+        assert!(transfer_reviewed(
+            &files,
+            &destination,
+            TransferMode::Move,
+            Some(review.plan_token),
+            true
+        )
+        .is_err());
+        assert!(files.iter().all(|p| Path::new(p).exists()));
+        let review = preview_transfer_plan(&files, &destination).unwrap();
+        std::fs::write(source.join("one.cdg"), b"appeared").unwrap();
+        assert!(transfer_reviewed(
+            &files,
+            &destination,
+            TransferMode::Move,
+            Some(review.plan_token),
+            true
+        )
+        .is_err());
+        let review = preview_transfer_plan(&files, &destination).unwrap();
+        let token = review.plan_token;
+        let moved = transfer_reviewed(
+            &files,
+            &destination,
+            TransferMode::Move,
+            Some(token.clone()),
+            true,
+        )
+        .unwrap();
+        assert_eq!(moved.renamed.len(), 2);
+        assert_eq!(moved.associated_renamed.len(), 2);
+        assert!(!lyric.exists());
+        assert_eq!(std::fs::read(target.join("one.lrc")).unwrap(), b"other");
+        assert_eq!(std::fs::read(target.join("one.cdg")).unwrap(), b"appeared");
+        assert!(
+            transfer_reviewed(&files, &destination, TransferMode::Move, Some(token), true).is_err()
+        );
+    }
+    #[test]
+    fn reviewed_move_rejects_audio_edits_late_collisions_and_policy_changes() {
+        let (_dir, source, target, files) = fixture();
+        let destination = target.to_string_lossy().into_owned();
+        std::fs::write(source.join("one.lrc"), b"lyrics").unwrap();
+        let review = preview_transfer_plan(&files, &destination).unwrap();
+        std::fs::write(&files[0], b"changed audio").unwrap();
+        assert!(transfer_reviewed(
+            &files,
+            &destination,
+            TransferMode::Move,
+            Some(review.plan_token),
+            true
+        )
+        .is_err());
+        let review = preview_transfer_plan(&files, &destination).unwrap();
+        std::fs::write(target.join("one.lrc"), b"keep").unwrap();
+        assert!(transfer_reviewed(
+            &files,
+            &destination,
+            TransferMode::Move,
+            Some(review.plan_token),
+            true
+        )
+        .is_err());
+        assert_eq!(std::fs::read(target.join("one.lrc")).unwrap(), b"keep");
+        std::fs::remove_file(target.join("one.lrc")).unwrap();
+        let review = preview_transfer_plan(&files, &destination).unwrap();
+        assert!(transfer_reviewed(
+            &files,
+            &destination,
+            TransferMode::Move,
+            Some(review.plan_token),
+            false
+        )
+        .is_err());
+        assert!(files.iter().all(|p| Path::new(p).exists()));
+        assert!(transfer_reviewed(&files, &destination, TransferMode::Move, None, true).is_err());
     }
 }

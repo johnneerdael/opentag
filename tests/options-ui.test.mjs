@@ -74,3 +74,12 @@ test('Directories offers the cover art directory stored with the extension pages
   assert.match(markup,/data-option="pages\.directories\.cover_art" value="%_folderpath%Scans"/);
   assert.match(page.controls.map(c=>ui.controlMarkup(c,draft())).join(''),/data-option="pages\.directories\.cover_art" value=""/);
 });
+
+
+test('associated files has a saved opt-in policy with an unchecked default',()=>{
+  const page=ui.pageTree().find(({page})=>page.id==='files').page;
+  const markup=value=>page.controls.map(control=>ui.controlMarkup(control,value)).join('');
+  assert.match(markup(draft()),/data-option="pages\.files\.associated_files"\s*>/);
+  assert.match(markup(draft(value=>{value.pages.files={associated_files:true};})),/data-option="pages\.files\.associated_files" checked/);
+  assert.match(markup(draft()),/Copy, other converters and action-driven renames do not use this option/);
+});

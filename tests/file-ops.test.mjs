@@ -306,3 +306,27 @@ test('a plain drop replaces the list after the unsaved-changes question', async 
   await ui.replaceWith(['/drop/a.mp3', '/drop/b.mp3']);
   assert.equal(host.loads[1][1].location, '2 dropped locations');
 });
+
+
+test('opted-in moves review companion paths once and apply the frozen token', async () => {
+  const {ui, host, calls} = harness({prefs: {subfolders: true, startup: 'empty', associatedFiles: true}});
+  const original = host.invoke;
+  host.invoke = async (command, args) => {
+    if (command === 'preview_transfer') {
+      calls.push([command, args]);
+      return {plan_token: 'frozen', associated: [{from: '/m/a.lrc', to: '/dest/a.lrc'}]};
+    }
+    return original(command, args);
+  };
+  host.picks.push(['/dest']);
+  await ui.operate('file-move');
+  assert.deepEqual(calls[0], ['preview_transfer', {paths: ['/m/a.mp3', '/m/b.mp3'], destination: '/dest'}]);
+  assert.match(host.confirmed.parts.join(host.confirmed.separator), /a\.lrc.*a\.lrc/s);
+  assert.deepEqual(calls[1], ['transfer_files', {paths: ['/m/a.mp3', '/m/b.mp3'], destination: '/dest', mode: 'move', planToken: 'frozen'}]);
+  host.picks.push(['/dest']); host.answers.push(false);
+  await ui.operate('file-move');
+  assert.equal(calls.filter(([command]) => command === 'transfer_files').length, 1, 'cancelled review never applies');
+  host.picks.push(['/dest']);
+  await ui.operate('file-copy');
+  assert.equal(calls.filter(([command]) => command === 'preview_transfer').length, 2, 'copy never silently adopts the move policy');
+});

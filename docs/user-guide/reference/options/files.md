@@ -5,6 +5,15 @@ Open **File → Options… → Files** to restrict folder scans, control separat
 !!! tip "New to this?"
     A tag value is data; a separator typed into a filename format string is a request to create a folder. This page keeps those two uses separate.
 
+## Associated files
+
+**Move matching .lrc and .cdg files with audio** defaults to off. Enable it to
+include exact-basename lyrics and karaoke companions in **Tag → Filename** and
+**Move files to**. Review their source and destination paths before applying.
+Other rename commands and **Copy files to** do not use this policy. See
+[associated files](../../guides/associated-files.md) for matching rules, errors
+and undo behavior.
+
 ## Read files
 
 **Restrict incoming files to** defaults to empty, meaning all supported formats. Enter extensions to limit files discovered while scanning a folder:

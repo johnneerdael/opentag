@@ -135,6 +135,9 @@ for(const page of [
       {kind:'checkbox',path:'pages.general.minimize_to_tray',label:'Minimize to notification area',enabledWhen:()=>notificationArea},
       {kind:'note',text:'Minimizing then hides the window and its task bar entry; click the icon or choose Show TagGroove in its menu to bring it back. Windows and Linux only (Linux needs libayatana-appindicator); macOS keeps minimized windows in the Dock.'}]}]},
   {id:'files',label:'Files',order:20,controls:[
+    {kind:'group',label:'Associated files',controls:[
+      {kind:'checkbox',path:'pages.files.associated_files',label:'Move matching .lrc and .cdg files with audio'},
+      {kind:'note',text:'Off by default. Applies to Tag → Filename and Move files to. Review the companion paths before applying. Only files with exactly the same basename and a .lrc or .cdg extension follow the audio. Copy, other converters and action-driven renames do not use this option.'}]},
     {kind:'group',label:'Read files',controls:[{kind:'text',path:'files.restrict_extensions',label:'Restrict incoming files to',placeholder:'All supported formats (for example *.mp3;*.flac)'},
       {kind:'note',text:'Applies to folders. Files you add individually are always read.'}]},
     {kind:'group',label:'Rename files from tags',controls:[{kind:'text',path:'files.folder_separator',label:'Replace folder separator in tag values with',placeholder:'Nothing: remove separators',maxLength:16},

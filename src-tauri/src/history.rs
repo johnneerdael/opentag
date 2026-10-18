@@ -42,6 +42,15 @@ pub trait Changes {
     }
 }
 impl Changes for ScanResult {}
+impl Changes for crate::file_ops::TransferResult {
+    fn renamed(&self) -> Vec<(String, String)> {
+        self.renamed
+            .iter()
+            .chain(&self.associated_renamed)
+            .map(|r| (r.from.clone(), r.to.clone()))
+            .collect()
+    }
+}
 impl<T: Changes> Changes for tag_core::batch_errors::Detailed<T> {
     fn renamed(&self) -> Vec<(String, String)> {
         self.result.renamed()
@@ -56,6 +65,7 @@ impl Changes for super::RenameResult {
     fn renamed(&self) -> Vec<(String, String)> {
         self.renamed
             .iter()
+            .chain(&self.associated_renamed)
             .map(|r| (r.from.clone(), r.to.clone()))
             .collect()
     }
@@ -238,7 +248,13 @@ fn replay_diagnostic(
     })??;
     let replay = report.result;
     super::library::changed(&replay.paths, &replay.renamed, &replay.directories);
-    let mut result = super::batch(&replay.paths, super::settings::read_summary);
+    let audio_paths: Vec<_> = replay
+        .paths
+        .iter()
+        .filter(|path| !crate::associated_files::is_companion(Path::new(path)))
+        .cloned()
+        .collect();
+    let mut result = super::batch(&audio_paths, super::settings::read_summary);
     let offset = result.errors.len();
     let diagnostics = report
         .error_diagnostics
@@ -1148,6 +1164,80 @@ mod tests {
             "%artist%%title%".into()
         ))
         .is_err());
+        TEST_ROOTS.lock().unwrap().retain(|r| r != &root);
+    }
+    #[test]
+    fn companion_moves_and_case_only_renames_undo_without_audio_parse_errors() {
+        let _journal = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let root = dunce::canonicalize(dir.path()).unwrap();
+        TEST_ROOTS.lock().unwrap().push(root.clone());
+        let key = |p: &Path| p.to_string_lossy().into_owned();
+        for destination in [root.join("SONG.wav"), root.join("Moved/renamed.wav")] {
+            let audio = root.join("Song.wav");
+            let lyric = root.join("Song.lrc");
+            wav(&audio, "Title");
+            std::fs::write(&lyric, b"lyrics").unwrap();
+            let original = std::fs::read(&audio).unwrap();
+            let plan =
+                crate::associated_files::Plan::new(vec![(key(&audio), destination.clone())], true)
+                    .unwrap();
+            let group = &plan.groups[0];
+            let moved_lyric = group.associated[0].target.clone();
+            let targets = vec![key(&audio), key(&lyric)];
+            let result = record("Move files", None, &targets, || {
+                group.execute(&mut tag_core::operations::rename_no_clobber)?;
+                Ok(crate::file_ops::TransferResult {
+                    result: ScanResult {
+                        entries: vec![],
+                        errors: vec![],
+                    },
+                    copied: vec![],
+                    renamed: vec![crate::file_ops::PathChange {
+                        from: key(&audio),
+                        to: key(&destination),
+                    }],
+                    associated_renamed: vec![crate::file_ops::PathChange {
+                        from: key(&lyric),
+                        to: key(&moved_lyric),
+                    }],
+                })
+            })
+            .unwrap();
+            assert_eq!(result.associated_renamed.len(), 1);
+            let undone = run(undo_last());
+            assert!(
+                undone.result.errors.is_empty(),
+                "{:?}",
+                undone.result.errors
+            );
+            assert_eq!(undone.result.entries.len(), 1);
+            assert_eq!(std::fs::read(&audio).unwrap(), original);
+            assert_eq!(std::fs::read(&lyric).unwrap(), b"lyrics");
+            let names: Vec<_> = std::fs::read_dir(&root)
+                .unwrap()
+                .map(|e| e.unwrap().file_name())
+                .collect();
+            assert!(names.contains(&std::ffi::OsString::from("Song.lrc")));
+            let redone = run(redo_last());
+            assert!(
+                redone.result.errors.is_empty(),
+                "{:?}",
+                redone.result.errors
+            );
+            assert_eq!(std::fs::read(&moved_lyric).unwrap(), b"lyrics");
+            // A companion edited elsewhere must be retained, even if the audio can undo.
+            std::fs::write(&moved_lyric, b"external lyric edit").unwrap();
+            let refused = run(undo_last());
+            assert!(refused
+                .result
+                .errors
+                .iter()
+                .any(|e| e.error.contains("Changed outside")));
+            assert_eq!(std::fs::read(&moved_lyric).unwrap(), b"external lyric edit");
+            std::fs::remove_file(&audio).unwrap();
+            std::fs::remove_file(&moved_lyric).unwrap();
+        }
         TEST_ROOTS.lock().unwrap().retain(|r| r != &root);
     }
 }

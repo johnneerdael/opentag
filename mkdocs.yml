@@ -176,6 +176,7 @@ nav:
     - Filtering the file list: guides/filter.md
     - Find text: guides/find.md
     - Copy, move and delete files: guides/file-operations.md
+    - Associated lyrics and karaoke: guides/associated-files.md
     - Undo and history: guides/undo-history.md
     - Built-in utilities: guides/utilities.md
     - Library cache: guides/library.md

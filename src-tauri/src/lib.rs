@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use tag_core::{Action, AudioEntry, Fields, FileError, ScanResult};
 mod action_host;
+mod associated_files;
 mod columns;
 mod converters;
 mod cover_drag;
@@ -1104,12 +1105,20 @@ fn filename_target(entry: &AudioEntry, generated: String) -> Result<PathBuf, Str
     Ok(target)
 }
 
+#[derive(Serialize)]
+struct RenamePreview {
+    path: String,
+    value: String,
+    plan_token: Option<String>,
+    associated: Vec<associated_files::Preview>,
+}
+
 #[tauri::command]
 async fn preview_rename(
     paths: Vec<String>,
     template: String,
     columns: Option<Vec<evaluation::ColumnSpec>>,
-) -> Result<Vec<Preview>, String> {
+) -> Result<Vec<RenamePreview>, String> {
     let settings = evaluation_settings(columns)?;
     io(move || {
         reject_provider_operation(&paths, "Rename")?;
@@ -1123,14 +1132,37 @@ async fn preview_rename(
                 &settings,
             )?);
         }
-        let token = rename_plan::record(&paths, &template, targets.clone())?;
+        let associated = if associated_files::enabled() {
+            Some(associated_files::Plan::new(
+                paths.iter().cloned().zip(targets.iter().cloned()).collect(),
+                true,
+            )?)
+        } else {
+            None
+        };
+        let token =
+            rename_plan::record_associated(&paths, &template, targets.clone(), associated.clone())?;
         Ok(paths
             .into_iter()
             .zip(targets)
-            .map(|(path, target)| Preview {
-                path,
+            .map(|(path, target)| RenamePreview {
+                path: path.clone(),
                 value: target.to_string_lossy().into_owned(),
                 plan_token: Some(token.clone()),
+                associated: associated
+                    .as_ref()
+                    .and_then(|plan| plan.groups.iter().find(|g| g.audio.source == path))
+                    .map(|group| {
+                        group
+                            .associated
+                            .iter()
+                            .map(|item| associated_files::Preview {
+                                from: item.source.clone(),
+                                to: item.target.to_string_lossy().into_owned(),
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default(),
             })
             .collect())
     })
@@ -1147,6 +1179,7 @@ struct RenameResult {
     #[serde(flatten)]
     result: ScanResult,
     renamed: Vec<Renamed>,
+    associated_renamed: Vec<Renamed>,
 }
 
 #[cfg(test)]
@@ -1166,9 +1199,12 @@ async fn rename_files_diagnostic(
     plan_token: Option<String>,
 ) -> Result<tag_core::batch_errors::Detailed<RenameResult>, String> {
     let evaluation = evaluation_settings(None)?;
-    let targets = paths.clone();
     io(move || {
         reject_provider_operation(&paths, "Rename")?;
+        let mut targets = paths.clone();
+        if let Some(token) = &plan_token {
+            targets.extend(rename_plan::associated_sources(token, &paths, &template)?);
+        }
         history::record("Tag → Filename", None, &targets, move || {
             rename_planned_diagnostic(paths, &template, plan_token, &evaluation)
         })
@@ -1227,6 +1263,21 @@ fn rename_planned_diagnostic(
     plan_token: Option<String>,
     evaluation: &evaluation::EvaluationSettings,
 ) -> Result<tag_core::batch_errors::Detailed<RenameResult>, String> {
+    rename_planned_with_policy(
+        paths,
+        template,
+        plan_token,
+        evaluation,
+        associated_files::enabled(),
+    )
+}
+fn rename_planned_with_policy(
+    paths: Vec<String>,
+    template: &str,
+    plan_token: Option<String>,
+    evaluation: &evaluation::EvaluationSettings,
+    associated_enabled: bool,
+) -> Result<tag_core::batch_errors::Detailed<RenameResult>, String> {
     {
         let mut diagnostics = Vec::new();
         let mut result = ScanResult {
@@ -1235,12 +1286,22 @@ fn rename_planned_diagnostic(
         };
         let mut plans = vec![];
         let mut destinations = std::collections::HashSet::new();
+        let mut associated = None;
         let candidates = if let Some(token) = plan_token {
-            rename_plan::consume(&token, &paths, template)?
+            let (targets, reviewed_associated) =
+                rename_plan::consume_associated(&token, &paths, template)?;
+            if reviewed_associated.is_some() != associated_enabled {
+                return Err("The associated-file policy changed; preview again".into());
+            }
+            associated = reviewed_associated;
+            targets
                 .into_iter()
                 .map(|(path, target)| (path, Ok(target)))
                 .collect::<Vec<_>>()
         } else {
+            if associated_enabled {
+                return Err("Preview the associated files before renaming".into());
+            }
             paths
                 .into_iter()
                 .enumerate()
@@ -1276,16 +1337,28 @@ fn rename_planned_diagnostic(
             }
         }
         let mut renamed = vec![];
+        let mut associated_renamed = vec![];
         // A file whose destination clashes is skipped and reported; the
         // others are still renamed.
         for (path, target) in plans {
-            let operation = if dunce::canonicalize(&path).ok().as_ref() == Some(&target) {
+            let group = associated
+                .as_ref()
+                .and_then(|plan| plan.groups.iter().find(|group| group.audio.source == path));
+            let operation = if let Some(group) = group {
+                group.execute(&mut tag_core::operations::rename_no_clobber)
+            } else if dunce::canonicalize(&path).ok().as_ref() == Some(&target) {
                 Ok(())
             } else {
                 tag_core::operations::rename_no_clobber(Path::new(&path), &target)
             };
             match operation {
                 Ok(()) => {
+                    if let Some(group) = group {
+                        associated_renamed.extend(group.associated.iter().map(|item| Renamed {
+                            from: item.source.clone(),
+                            to: item.target.to_string_lossy().into_owned(),
+                        }));
+                    }
                     let to = target.to_string_lossy().into_owned();
                     renamed.push(Renamed {
                         from: path,
@@ -1300,7 +1373,11 @@ fn rename_planned_diagnostic(
             }
         }
         Ok(tag_core::batch_errors::Detailed {
-            result: RenameResult { result, renamed },
+            result: RenameResult {
+                result,
+                renamed,
+                associated_renamed,
+            },
             error_diagnostics: diagnostics,
         })
     }
@@ -1486,6 +1563,7 @@ pub fn run() {
             file_ops::trash_files,
             file_ops::delete_files_permanently,
             file_ops::modifier_keys,
+            file_ops::preview_transfer,
             file_ops::transfer_files,
             file_ops::reveal_files,
             file_ops::open_directory,
@@ -2641,5 +2719,49 @@ mod tests {
         let entry = tag_core::write_fields(&path, &fields).unwrap();
         let target = rename_target(&entry, "$replace(%title%,':','-')").unwrap();
         assert_eq!(target.file_name().unwrap(), "A-B.wav");
+    }
+    #[test]
+    fn reviewed_tag_to_filename_moves_companions_and_requires_fresh_membership() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dunce::canonicalize(dir.path()).unwrap();
+        let source = root.join("old.wav");
+        let target = root.join("new.wav");
+        wav(&source);
+        let paths = vec![source.to_string_lossy().into_owned()];
+        let lyric = root.join("old.lrc");
+        std::fs::write(&lyric, b"lyrics").unwrap();
+        let review = || {
+            let plan = associated_files::Plan::new(vec![(paths[0].clone(), target.clone())], true)
+                .unwrap();
+            rename_plan::record_associated(&paths, "new", vec![target.clone()], Some(plan)).unwrap()
+        };
+        let evaluation = evaluation_settings(None).unwrap();
+        let token = review();
+        std::fs::write(root.join("old.cdg"), b"late companion").unwrap();
+        assert!(
+            rename_planned_with_policy(paths.clone(), "new", Some(token), &evaluation, true)
+                .is_err()
+        );
+        assert!(source.exists() && lyric.exists() && !target.exists());
+        let token = review();
+        let result = rename_planned_with_policy(
+            paths.clone(),
+            "new",
+            Some(token.clone()),
+            &evaluation,
+            true,
+        )
+        .unwrap()
+        .result;
+        assert!(result.result.errors.is_empty());
+        assert_eq!(result.renamed.len(), 1);
+        assert_eq!(result.associated_renamed.len(), 2);
+        assert_eq!(std::fs::read(root.join("new.lrc")).unwrap(), b"lyrics");
+        assert_eq!(
+            std::fs::read(root.join("new.cdg")).unwrap(),
+            b"late companion"
+        );
+        assert!(!source.exists() && !lyric.exists());
+        assert!(rename_planned_with_policy(paths, "new", Some(token), &evaluation, true).is_err());
     }
 }

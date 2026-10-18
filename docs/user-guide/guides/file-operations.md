@@ -82,11 +82,15 @@ a successfully moved file can disappear from the list. That disappearance
 is not deletion. Inspect the reported destination in the file manager or
 open the destination folder in TagGroove.
 
-Copy/move commands do not create a session tag-Undo step. To reverse a move,
-inspect the destination first, then deliberately move the file back when its
-original name/location is available. To remove an unwanted copy, identify the
-copy rather than deleting the original. Do not treat an older **Undo Save
-tags** menu item as an undo of the more recent file transfer.
+Move commands now record a session **Undo Move files** step when history can
+retain the files. Inspect the result and any history notice before relying on
+Undo. Files changed elsewhere are reported and retained; other files in the
+step can still reverse. Copy commands do not create a transfer Undo step.
+Identify the destination copy carefully before removing an unwanted copy.
+
+To move same-basename `.lrc`/`.cdg` companions too, enable the optional
+[associated files policy](associated-files.md). The existing Move confirmation
+then lists their reviewed paths. The policy does not apply to Copy.
 
 ## Remove rows while retaining files
 
