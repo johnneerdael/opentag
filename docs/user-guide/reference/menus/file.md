@@ -21,10 +21,12 @@ it. To replace or clear a field, make that edit explicitly and inspect the
 pending selection.
 
 For a supported provider document, **Save a copy…** offers **Edited copy**
-with pending tag-field changes or **Original backup** from the last verified
-source. Pending artwork changes are not part of the copy request. The source
-and recovery copies are retained, and the written copy is checked before a
-successful result is reported.
+with pending tag-field and artwork changes, including removal of all covers,
+or **Original backup** from the last verified source. The original backup
+ignores pending changes. The source, pending edits and recovery copies are
+retained, and the written copy is checked before a successful result is
+reported. Cancelling the destination picker or failing to write the copy
+leaves those source edits available for another attempt.
 
 **Reload tags** is useful after an external edit, but first resolve any
 pending changes you want to retain. It is different from **Refresh**, which

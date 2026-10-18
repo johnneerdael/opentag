@@ -488,12 +488,12 @@ async fn document_states(
 }
 #[tauri::command]
 async fn document_save_copy(
-    app: tauri::AppHandle,
     path: String,
     updates: Fields,
+    covers: Option<Vec<list_behaviour::PendingCover>>,
     version: String,
 ) -> Result<ScanResult, String> {
-    io(move || documents::save_copy(&app, &path, &updates, &version)).await
+    io(move || documents::save_copy(&path, &updates, covers.as_deref(), &version)).await
 }
 #[tauri::command]
 async fn document_working_entries(paths: Vec<String>) -> Result<ScanResult, String> {
@@ -1558,6 +1558,10 @@ pub fn run() {
             }
         });
 }
+
+#[cfg(test)]
+#[path = "documents/copy_command_tests.rs"]
+mod document_copy_tests;
 
 #[cfg(test)]
 mod tests {

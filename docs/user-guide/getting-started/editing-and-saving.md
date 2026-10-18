@@ -120,9 +120,11 @@ policies to solve a player compatibility issue.
 Read-only local files can fail to save. Provider-backed documents have their
 own access and recovery state: follow **Source read-only**, **Source access
 unknown** or **Recovery required** messages. **Save a copy…** can preserve
-supported edited tag fields or an original backup when offered; pending
-artwork is not included in that copy request. It is not a general desktop
-“Save As” replacement. See the [File menu](../reference/menus/file.md).
+supported edited tag fields and pending artwork, or an original backup when
+offered. The edited copy includes pending cover removal; the original backup
+ignores all pending changes. The source and its pending edits remain
+available after a copy, including cancellation or failure. It is not a general
+desktop “Save As” replacement. See the [File menu](../reference/menus/file.md).
 
 ## Related
 

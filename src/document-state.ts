@@ -1,3 +1,5 @@
+import type { PendingCover } from './tag-clipboard';
+
 type Fields = Record<string, string[]>;
 export type DocumentState = {
   uri: string; name: string; writable: boolean; persisted: boolean;
@@ -29,8 +31,9 @@ export async function refreshDocumentAccess(previous: DocumentAccess, load: () =
   try { return { states: await load(), refreshError: null }; }
   catch(error) { return { states: previous.states, refreshError: String(error) }; }
 }
-export function copyRequest(path: string, version: 'edited'|'original', draft: Fields = {}) {
-  return { path, version, updates: version === 'edited' ? structuredClone(draft) : {} };
+export function copyRequest(path: string, version: 'edited'|'original', draft: Fields = {}, covers?: PendingCover[]) {
+  return { path, version, updates: version === 'edited' ? structuredClone(draft) : {},
+    ...(version === 'edited' && covers !== undefined ? { covers: structuredClone(covers) } : {}) };
 }
 export function copyOutcome(batch: {entries: unknown[]; errors: unknown[]}) {
   return batch.errors.length ? 'failed' : batch.entries.length ? 'saved' : 'cancelled';

@@ -301,7 +301,7 @@ fn read_only_does_not_call_local_writer_but_edited_copy_applies_drafts() {
         .is_err());
     let result = f
         .store
-        .save_copy(Path::new(&entry.path), &updates(), "edited")
+        .save_copy(Path::new(&entry.path), &updates(), None, "edited")
         .unwrap();
     assert_eq!(result.entries.len(), 1);
     assert_eq!(result.entries[0].fields["TITLE"], ["Edited title"]);
@@ -321,7 +321,7 @@ fn original_copy_ignores_draft_and_export_does_not_clear_recovery() {
     f.files.0.failure.set(0);
     let result = f
         .store
-        .save_copy(Path::new(&entry.path), &updates(), "original")
+        .save_copy(Path::new(&entry.path), &updates(), None, "original")
         .unwrap();
     assert_eq!(fs::read(&result.entries[0].path).unwrap(), f.source);
     assert_eq!(f.store.states()[&entry.path].state, "recovery_required");
@@ -329,10 +329,92 @@ fn original_copy_ignores_draft_and_export_does_not_clear_recovery() {
     let count = f.store.states().len();
     let cancelled = f
         .store
-        .save_copy(Path::new(&entry.path), &updates(), "edited")
+        .save_copy(Path::new(&entry.path), &updates(), None, "edited")
         .unwrap();
     assert!(cancelled.entries.is_empty() && cancelled.errors.is_empty());
     assert_eq!(f.store.states().len(), count);
+}
+#[test]
+fn failed_copy_keeps_pending_artwork_and_fields_through_restart_and_fresh_copy() {
+    let mut image = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(3, 2, image::Rgb([0, 255, 0])))
+        .write_to(&mut image, image::ImageFormat::Png)
+        .unwrap();
+    let image = image.into_inner();
+    let replacement = vec![tag_core::CoverChange {
+        image: Some(image.clone()),
+        picture_type: "CoverBack".into(),
+        description: "Pending back".into(),
+        all_files: true,
+        ..Default::default()
+    }];
+    for remove_all in [false, true] {
+        for failure in [1, 2, 3] {
+            let mut f = Fixture::new(true);
+            let source = f.files.path("content://test/source");
+            tag_core::add_cover_bytes_with_options(
+                &source,
+                image.clone(),
+                "Original",
+                Some("CoverFront"),
+                &tag_core::TagOptions::default(),
+            )
+            .unwrap();
+            f.source = fs::read(&source).unwrap();
+            let entry = f.import();
+            let covers = if remove_all {
+                &[][..]
+            } else {
+                &replacement[..]
+            };
+            f.files.0.failure.set(failure);
+            assert!(f
+                .store
+                .save_copy(Path::new(&entry.path), &updates(), Some(covers), "edited")
+                .is_err());
+            assert_eq!(fs::read(&source).unwrap(), f.source);
+            assert_eq!(fs::read(&entry.path).unwrap(), f.source);
+            let state = f.store.states();
+            let copy_path = state
+                .keys()
+                .find(|path| *path != &entry.path)
+                .unwrap()
+                .clone();
+            assert_eq!(state[&copy_path].state, "recovery_required");
+            let edited_bytes = fs::read(&copy_path).unwrap();
+            assert_eq!(audio(&edited_bytes), audio(&f.source));
+            f.files.0.unavailable.set(true);
+            f.restart();
+            assert_eq!(f.store.states()[&copy_path].state, "recovery_required");
+            let recovered = f.store.read_working(Path::new(&copy_path)).unwrap();
+            assert_eq!(recovered.fields["TITLE"], ["Edited title"]);
+            assert_eq!(recovered.covers.len(), usize::from(!remove_all));
+            assert_eq!(fs::read(&copy_path).unwrap(), edited_bytes);
+            f.files.0.failure.set(0);
+            let retry = f
+                .store
+                .save_copy(Path::new(&copy_path), &Fields::new(), None, "edited")
+                .unwrap();
+            let copied = tag_core::read_entry(Path::new(&retry.entries[0].path)).unwrap();
+            assert_eq!(copied.fields["TITLE"], ["Edited title"]);
+            assert_eq!(copied.covers.len(), usize::from(!remove_all));
+            if !remove_all {
+                assert_eq!(copied.covers[0].description, "Pending back");
+                assert_eq!(copied.covers[0].picture_type, "CoverBack");
+                use base64::Engine;
+                assert_eq!(
+                    base64::engine::general_purpose::STANDARD
+                        .decode(&copied.covers[0].data_base64)
+                        .unwrap(),
+                    image
+                );
+            }
+            assert_eq!(fs::read(&entry.path).unwrap(), f.source);
+            assert_eq!(fs::read(&copy_path).unwrap(), edited_bytes);
+            assert!(f.backups_contain(&f.source));
+            assert_eq!(f.store.states()[&copy_path].state, "recovery_required");
+        }
+    }
 }
 #[test]
 fn restart_detects_unrecorded_local_changes_and_restores_without_provider_access() {
@@ -456,13 +538,13 @@ fn provider_unavailable_recovery_can_export_verified_backup_to_new_provider_docu
     assert_eq!(restored.entries[0].path, entry.path);
     let copied = f
         .store
-        .save_copy(Path::new(&entry.path), &updates(), "original")
+        .save_copy(Path::new(&entry.path), &updates(), None, "original")
         .unwrap();
     assert_eq!(fs::read(&copied.entries[0].path).unwrap(), f.source);
     assert_eq!(fs::read(&entry.path).unwrap(), b"invalid edited audio");
     assert!(f
         .store
-        .save_copy(Path::new(&entry.path), &updates(), "edited")
+        .save_copy(Path::new(&entry.path), &updates(), None, "edited")
         .is_err());
 }
 #[cfg(unix)]
@@ -499,7 +581,7 @@ fn failed_ready_manifest_after_provider_success_keeps_old_backup_until_restart()
     f.files.0.failure.set(0);
     let copy = f
         .store
-        .save_copy(Path::new(&entry.path), &Fields::new(), "original")
+        .save_copy(Path::new(&entry.path), &Fields::new(), None, "original")
         .unwrap();
     assert_eq!(fs::read(&copy.entries[0].path).unwrap(), f.source);
 }

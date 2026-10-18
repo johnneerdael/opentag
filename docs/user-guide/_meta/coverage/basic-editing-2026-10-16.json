@@ -1,5 +1,6 @@
 {
   "scope": "Four authored local basic-editing guides, layered on the three preserved customization/Find chapters; not published and no PR.",
+  "superseded_behavior": "The historical provider Save a copy fields-only limitation recorded below is superseded by docs/verification/provider-copy-artwork.md. Edited copies include pending artwork, and readable read-only/recovery sources can stage it through Copy/Paste/Cut; device qualification remains open.",
   "source_main": "dbcd9ce43c64e459c20553f9d14b5d77534847a0",
   "preserved_customization_commit": "f70578d6eee342b7f60607921d9882d47bd95c7b",
   "local_base_after_cherry_pick": "30c816c",

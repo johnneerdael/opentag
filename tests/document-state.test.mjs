@@ -65,6 +65,18 @@ test('edited copy includes a snapshot of pending fields and original backup igno
   assert.equal(edited.updates.TITLE[0], 'Edited title');
   assert.deepEqual(copyRequest(path,'original',draft),{path,version:'original',updates:{}});
 });
+test('edited copy snapshots pending artwork, including explicit removal; original ignores it', () => {
+  const draft={TITLE:['Pending']}, covers=[{digest:'cover-1',picture_type:'CoverBack',description:'Pending cover'}];
+  const request=copyRequest(path,'edited',draft,covers);
+  assert.deepEqual(request,{path,version:'edited',updates:draft,covers});
+  covers[0].description='Changed later';covers.push({digest:'cover-2',picture_type:'CoverFront',description:''});
+  assert.equal(request.covers.length,1);
+  assert.equal(request.covers[0].description,'Pending cover');
+  assert.deepEqual(copyRequest(path,'edited',{},[]),{path,version:'edited',updates:{},covers:[]});
+  assert.deepEqual(copyRequest(path,'edited',{}),{path,version:'edited',updates:{}});
+  assert.deepEqual(copyRequest(path,'original',draft,covers),{path,version:'original',updates:{}});
+  assert.deepEqual(copyRequest(path,'original',draft,[]),{path,version:'original',updates:{}});
+});
 test('copy cancellation never reports a save and copy failures remain failures', () => {
   assert.equal(copyOutcome({entries:[],errors:[]}), 'cancelled');
   assert.equal(copyOutcome({entries:[],errors:[{path,error:'Destination failed'}]}), 'failed');

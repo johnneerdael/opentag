@@ -1474,7 +1474,7 @@ function saveCopy() {
   dialog.addEventListener('cancel',event=>{if(copying)event.preventDefault();});
   saveButton.addEventListener('click',async()=>{
     if(copying||busy)return;
-    const request=copyRequest(path,value(dialog,'copy-version') as 'edited'|'original',editedCopyFields(path));
+    const request=copyRequest(path,value(dialog,'copy-version') as 'edited'|'original',editedCopyFields(path),pendingCovers.get(path));
     copying=true;saveButton.disabled=true;closeButton.disabled=true;dialog.querySelector<HTMLSelectElement>('#copy-version')!.disabled=true;
     dialog.querySelector('.dialog-error')?.remove();
     const progress=dialog.querySelector<HTMLElement>('.copy-status')!;progress.textContent='Choose a destination. The copy will be checked after writing.';
@@ -1667,9 +1667,9 @@ async function replayHistory(kind:'undo'|'redo'){
   });
 }
 const clipTargets=()=>paths().map(path=>({path,fields:merged(entries.get(path)!)}));
-// Files whose covers are known and saved in place: provider documents with unreadable working copies, or
-// that only Save a copy can keep (it writes fields only), are left alone.
-const coverTargets=()=>sourcePolicy().mutationReason?[]:paths().filter(path=>!workingReadErrors.has(path)).map(path=>({path,covers:pendingCovers.get(path)??entries.get(path)!.covers}));
+// Clipboard operations stage edits, including for read-only or recovery sources.
+// Leave artwork alone when the retained working copy cannot be read.
+const coverTargets=()=>paths().filter(path=>!workingReadErrors.has(path)).map(path=>({path,covers:pendingCovers.get(path)??entries.get(path)!.covers}));
 function stageTagUpdates(plan:()=>PasteUpdate[],operation:'Cut tags'|'Paste tags',statusMessage:(count:number)=>string,coverPlan:()=>CoverUpdate[]=()=>[]){
   try{
     const updates=plan(),coverUpdates=coverPlan();

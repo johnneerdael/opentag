@@ -231,17 +231,37 @@ pub(crate) fn snapshot_input_with_name(
     Ok((PathBuf::from(path), None))
 }
 pub fn save_copy(
-    app: &tauri::AppHandle,
     path: &str,
     updates: &Fields,
+    covers: Option<&[crate::list_behaviour::PendingCover]>,
     version: &str,
 ) -> Result<ScanResult, String> {
-    initialize(app)?;
-    #[cfg(target_os = "android")]
-    return android::with_store(|store| store.save_copy(Path::new(path), updates, version));
-    #[cfg(not(target_os = "android"))]
+    // Resolve pending image bytes once, before opening CREATE_DOCUMENT. Original
+    // backups ignore all draft intent, including stale clipboard references.
+    let changes = if version == "edited" {
+        covers
+            .map(crate::list_behaviour::cover_changes)
+            .transpose()?
+    } else {
+        None
+    };
+    #[cfg(test)]
     {
-        let _ = (path, updates, version);
+        return command_fixture::STORES
+            .lock()
+            .unwrap()
+            .iter_mut()
+            .find(|store| store.is_managed(Path::new(path)))
+            .ok_or_else(|| "Unknown provider document".to_string())?
+            .save_copy(Path::new(path), updates, changes.as_deref(), version);
+    }
+    #[cfg(all(target_os = "android", not(test)))]
+    return android::with_store(|store| {
+        store.save_copy(Path::new(path), updates, changes.as_deref(), version)
+    });
+    #[cfg(not(any(target_os = "android", test)))]
+    {
+        let _ = (path, updates, changes, version);
         Err("Provider Save a copy is supported only on Android".into())
     }
 }

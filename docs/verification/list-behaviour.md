@@ -31,9 +31,15 @@ No option for copying artwork is documented, so none was added.
 - `node --test tests/*.test.mjs`: 231 passed (new `tests/list-behaviour.test.mjs`, 11 tests; `tests/document-coordination.test.mjs` harness updated for the pending-cover state).
 - Native e2e: `tests/e2e/list-behaviour.js` with `tests/e2e/list-behaviour-fixtures.sh` (folder.png and an MP3 with an embedded cover) added to the `native-e2e` suite list in `.github/workflows/build.yml`. CI only.
 
+Provider **Save a copy → Edited copy** now includes pending artwork. Copy,
+Paste and Cut stage covers from readable working copies even for read-only
+or recovery-required sources; source publication remains blocked in those
+states. See [the provider-copy verification](provider-copy-artwork.md) for
+request, recovery and testing boundaries. Actual-device provider qualification
+remains open.
+
 ## Remaining gaps
 
-- Save a copy for provider documents writes fields only, so cover paste is not offered while edits must go through Save a copy.
 - Saving on move is not triggered by the cell editor's Enter/Tab advance, Find, Select all or Select directory (they are not "moving to another file" in the documented sense).
 - Alt+drag has no drag image beyond the drop line, and auto-scrolls only while the pointer moves near the list edges.
 - The manual order lasts while the files are listed; it is not stored across sessions.
