@@ -172,6 +172,14 @@ fn resolve(
     Ok(keys)
 }
 
+/// Check even unreferenced include files before installing a collection.
+pub(super) fn validate_includes(
+    file: &str,
+    read: &dyn Fn(&str) -> Result<String, String>,
+) -> Result<(), String> {
+    resolve(file, read, 0).map(|_| ())
+}
+
 /// `[SearchBy]`: up to three `Label||%format%||address part` triples, written
 /// one after another with `||` (Mp3tag's own sources) or joined by `$$`. A
 /// value without `||` is a format string alone.

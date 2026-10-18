@@ -1,0 +1,107 @@
+{
+  "date": "2026-10-18",
+  "source_baseline": "4a1a95ff4eddb9da7492aaace68197c4f81347d0",
+  "platform": "macOS arm64",
+  "private_bundle_redistributed": false,
+  "qualification": "install dependency/schema checks and parser compilation; provider outcomes documented separately",
+  "bundles": [
+    {
+      "bundle": "Traxsource_by_Jordi_and_Claude_v3.0",
+      "files": [
+        {
+          "file": "&Traxsource by Jordi & Claude#RELEASE &Direct by ID.src",
+          "bytes": 103,
+          "sha256": "f76072d8f09e48406357be66e8ca47e4c2990d929d167be1b4e63956ed2734ca"
+        },
+        {
+          "file": "&Traxsource by Jordi & Claude#RELEASE Search by &Album.src",
+          "bytes": 84,
+          "sha256": "627c91b43f1569bb2ad2583e7ea420348e1d6a836693497ddf8bc9fced1a51e5"
+        },
+        {
+          "file": "&Traxsource by Jordi & Claude#RELEASE Search by &Artist.src",
+          "bytes": 209,
+          "sha256": "a42c0817d852646e4b7f6f99d5ebcf29132b127143780ce3523d81437740eb62"
+        },
+        {
+          "file": "&Traxsource by Jordi & Claude#RELEASE Search by Artist + &Release.src",
+          "bytes": 464,
+          "sha256": "85b05f09ac8ef720e9ea24541b7305625d96ccc919ad8ef9d2abbedb39a235a4"
+        },
+        {
+          "file": "&Traxsource by Jordi & Claude#TRACK &Direct by ID.src",
+          "bytes": 101,
+          "sha256": "9f4e9141d64c45539b315d100a8b9e17744ea251f13d303aea74dfe15b6e4d04"
+        },
+        {
+          "file": "&Traxsource by Jordi & Claude#TRACK Search by &Artist + Title.src",
+          "bytes": 462,
+          "sha256": "419901a458d28a037a022e63ded9affd3ba8c88c1a02486346e4883b31af3252"
+        },
+        {
+          "file": "&Traxsource by Jordi & Claude#TRACK Search by &Artist.src",
+          "bytes": 207,
+          "sha256": "b32307827498372a8be18c170a5950f77aaaa8a0e543b4cb74ac6998b40bc3a6"
+        },
+        {
+          "file": "&Traxsource by Jordi & Claude#TRACK Search by &Title.src",
+          "bytes": 322,
+          "sha256": "bef4c5e7defeeacb871db72526a64d1a7626f82f8b6c7d6a120f825aada449df"
+        },
+        {
+          "file": "&Traxsource by Jordi & Claude#USER SETTIN&GS.settings",
+          "bytes": 3804,
+          "sha256": "ea2bd5aeb5aac99c9b3b6ce3ad334520f49991a283025b011ba996c483cdfbbd"
+        },
+        {
+          "file": "Traxsource by Jordi & Claude#RELEASE Direct by ID.inc",
+          "bytes": 3075,
+          "sha256": "a4599100b3847de19b4894bb895e20b1541d67002255bd873013b6ab54acb046"
+        },
+        {
+          "file": "Traxsource by Jordi & Claude#RELEASE Search.inc",
+          "bytes": 4677,
+          "sha256": "63dfe5741493eec778f6592c0853a158ff813e749b9558fc4b308e8a2752af3f"
+        },
+        {
+          "file": "Traxsource by Jordi & Claude#TRACK Direct by ID.inc",
+          "bytes": 5172,
+          "sha256": "6b364794b732ea992e2fcbeabac5d20fdb6f342518fc59784156a4b076007757"
+        },
+        {
+          "file": "Traxsource by Jordi & Claude#TRACK Search.inc",
+          "bytes": 9976,
+          "sha256": "ca5894aa7ba6cef90e20c47e6184415e3b138d5972af542f13c4abd19134c1a3"
+        }
+      ],
+      "install_preflight": true,
+      "sources_loaded": 8,
+      "parser_blocks_compiled": 14,
+      "settings_schemas": 1
+    },
+    {
+      "bundle": "SoundCloud_WS_V2.28_by_Jordi_and_Claude",
+      "files": [
+        {
+          "file": "&SoundCloud WS V2.28#Sound&Cloud WS V2.src",
+          "bytes": 97,
+          "sha256": "480c51599e3cf40cfa9429456300b4a6110a40a63cf411cc452398b356d3a8fd"
+        },
+        {
+          "file": "&SoundCloud WS V2.28#SoundCloud WS V2&SETTINGS.settings",
+          "bytes": 2625,
+          "sha256": "dcbb42b22f74e869f2922004382fd89469ecbc64587012f22ca01236204314d3"
+        },
+        {
+          "file": "SoundCloud WS V2.28.inc",
+          "bytes": 6372,
+          "sha256": "276a2285ffd9f84c065e00b61a2c8b40a26eb1942b4b375e34a5107b182d0f23"
+        }
+      ],
+      "install_preflight": true,
+      "sources_loaded": 1,
+      "parser_blocks_compiled": 2,
+      "settings_schemas": 1
+    }
+  ]
+}

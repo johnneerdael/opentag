@@ -86,7 +86,7 @@ type WebSourcesHost = {
   last:()=>string|null;
   shortcut:string;
   changed:()=>void;
-  pickFiles:()=>Promise<string[]|null>;
+  pickFiles:(mode?:'files'|'folder')=>Promise<string[]|null>;
   report:(message:string)=>void;
   fail:(error:unknown)=>void;
 };
@@ -147,14 +147,30 @@ export class WebSourcesUI {
 
   /** Tag Sources → Install tag sources…: copy chosen files into the sources folder. */
   async install() {
-    const paths = await this.host.pickFiles();
-    if (!paths?.length) return;
+    if (this.showing) return;
+    this.showing = true;
+    const mode = await new Promise<'files'|'folder'|null>(resolve => {
+      const dialog = document.createElement('dialog');
+      dialog.className = 'tag-source-dialog';
+      dialog.setAttribute('aria-label','Install tag sources');
+      dialog.innerHTML = '<header>Install tag sources</header><div class="dialog-content"><p>Choose a complete downloaded folder or ZIP, or select all source files and their companions together. The installation is checked before replacing existing files.</p><p>Individual-file updates can reuse installed companion files.</p></div><div class="dialog-footer"><button data-cancel>Cancel</button><button data-folder>Folder…</button><button data-files>Files or ZIP…</button></div>';
+      let chosen:'files'|'folder'|null = null;
+      dialog.querySelector('[data-folder]')!.addEventListener('click',()=>{chosen='folder';dialog.close();});
+      dialog.querySelector('[data-files]')!.addEventListener('click',()=>{chosen='files';dialog.close();});
+      dialog.querySelector('[data-cancel]')!.addEventListener('click',()=>dialog.close());
+      dialog.addEventListener('close',()=>{dialog.remove();resolve(chosen);},{once:true});
+      document.body.append(dialog);dialog.showModal();
+    });
+    if (!mode) { this.showing = false; return; }
     try {
+      const paths = await this.host.pickFiles(mode);
+      if (!paths?.length) return;
       const listing = await this.host.invoke<WebListing>('web_sources_install',{paths});
       this.listing = listing; this.host.changed();
       const names = paths.map(path => path.split(/[\\/]/).pop()).join(', ');
       this.host.report(listing.problems.length ? `Installed ${names}. ${listing.problems.length} tag source file${listing.problems.length === 1 ? '' : 's'} could not be read: ${listing.problems.map(p => `${p.file}: ${p.error}`).join('; ')}` : `Installed ${names}`);
     } catch (error) { this.host.fail(error); }
+    finally { this.showing = false; }
   }
   async openFolder() { try { await this.host.invoke('web_sources_open_folder'); } catch (error) { this.host.fail(error); } }
 

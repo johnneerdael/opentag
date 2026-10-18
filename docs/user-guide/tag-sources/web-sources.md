@@ -12,18 +12,42 @@ the right edition or track mapping for your selected files.
 
 ## Install the complete source
 
-1. Obtain the source's `.src` file and any companion `.inc` and `.settings`
-   files. Keep them together and inspect what they are intended to query.
+1. Obtain the complete source download. Keep its `.src`, `.inc` and
+   `.settings` files together and inspect what they are intended to query.
 2. Choose **Tag Sources → Install tag sources…** on a desktop with folder
-   access. Select all required files, not just the `.src`.
-3. Read the installation result. A copied file can still have a missing
-   include, invalid schema or unsupported syntax.
-4. Open **Tag Sources** and choose the installed entry.
+   access. Choose **Folder…** for an unpacked download, or **Files or ZIP…**
+   for a ZIP archive or a selection of all companion files.
+3. Read the installation result. Missing includes, missing/invalid settings
+   schemas and invalid source headers stop the entire update before replacement.
+4. Open **Tag Sources** and choose the installed entry. Installation checks
+   dependencies and schemas; a real lookup must still qualify the parser and
+   provider response.
 
-The supported installer accepts individual local `.src`, `.inc` and
-`.settings` files up to 4 MB each. It copies them by filename into the sources
-folder; an existing file with that name can be replaced. Back up a customized
-source before installing another version with the same filenames.
+The installer accepts local source files up to 4 MB each, ZIPs up to 128 MB,
+4096 entries, and source paths at most three folders deep. It preserves nested
+folders, source filenames, submenu/access-key markers and existing source IDs
+when updating the same path with different filename case. ZIP paths must be
+relative, without traversal, drive prefixes, symbolic links or repeated names
+(including names differing only by case). Downloaded documentation is ignored.
+
+Folder/ZIP updates require the complete collection: an old installed include
+cannot satisfy a missing companion in the new download. Explicit individual-file
+selections also support incremental updates, reusing installed companions after
+validating the combined staged files. The installer stages
+all files beside the sources folder before replacement. Existing unrelated
+files and `settings.json` values remain; incoming downloads cannot replace that
+values file. Saved values still need the same schema root key and value type.
+The combined sources folder must fit the 128 MB/4096-entry staging limits;
+move large debug captures elsewhere if necessary. Existing symbolic links or
+folders deeper than three levels must be moved aside before installation.
+
+After a successful replacement, `data/.opentag-sources-previous` retains the
+complete previous sources folder, including its configured values. Another
+successful update replaces that snapshot. To roll back manually, close OpenTag,
+move `data/sources` aside, and rename `.opentag-sources-previous` to `sources`.
+If an interrupted replacement leaves the sources folder missing, OpenTag
+restores this snapshot automatically on the next source-list/settings read.
+The original downloaded folder/ZIP is never modified.
 
 **Tag Sources → Open sources folder** opens
 `data/sources` inside TagGroove's configuration folder. **File → Open
@@ -65,7 +89,9 @@ uses the entered identifier to reach the album page.
 At review, check proposed fields, enabled states, artwork and the mapping
 between local files and source tracks. A parser's track order is not a promise
 that automatic matching or ordering suggestions preserved the intended local
-order. Match by known titles/positions when needed. Apply only the fields and
+order. Match by known titles/positions when needed. If a source supplies only
+album-wide values without a track list, its checked fields apply to every
+selected file. For a single-track lookup, select only the intended local file. Apply only the fields and
 artwork you intend to change, then read the reported result and file errors.
 
 The source parser does not interpret arbitrary tag fields in its command

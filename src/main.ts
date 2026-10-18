@@ -523,7 +523,7 @@ const webSourcesUI=new WebSourcesUI({
   last:()=>tagSourcesUI.lastWeb,
   shortcut:'⌘/Ctrl I',
   changed:()=>render(),
-  pickFiles:async()=>{const chosen=await open({multiple:true,title:'Install tag sources',filters:[{name:'Tag sources',extensions:['src','inc','settings']}]});return Array.isArray(chosen)?chosen:typeof chosen==='string'?[chosen]:null;},
+  pickFiles:async(mode='files')=>{const chosen=await open(mode==='folder'?{directory:true,multiple:false,title:'Install source folder'}:{multiple:true,title:'Install tag sources or ZIP',filters:[{name:'Tag sources or ZIP',extensions:['src','inc','settings','zip']}]});return Array.isArray(chosen)?chosen:typeof chosen==='string'?[chosen]:null;},
   report:message=>{status=message;render();},
   fail:error=>{errors=[{path:'Tag sources',label:'Tag sources',error:error instanceof Error?error.message:String(error)}];render();},
 });

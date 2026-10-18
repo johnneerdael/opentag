@@ -326,8 +326,22 @@ test('real column-import and source-install warnings retain joined diagnostics a
       assert.equal(p.body.textContent,t.t(keys[count===1?0:1],{length:count,path:'Help.ini',length2:count,join:skipped.join('; ')}));
       p.body.removeAttribute('translate');const paths=Array.from({length:count},(_,index)=>`/tmp/${index?'Title':'Help'}.src`),problems=paths.map(path=>({file:path.split('/').at(-1),error:'Wrong expression'}));
       const sources=new WebSourcesUI({pickFiles:async()=>paths,invoke:async()=>({sources:[],problems}),changed:()=>{},report:message=>{p.body.textContent=message;},fail:error=>{throw error;}});
-      await sources.install();p.translate(locale,catalog);
+      const installing=sources.install();p.body.querySelector('[data-files]').click();await installing;p.translate(locale,catalog);
       assert.equal(p.body.textContent,t.t(keys[count===1?2:3],{names:paths.map(path=>path.split('/').at(-1)).join(', '),length:count,join:problems.map(problem=>`${problem.file}: ${problem.error}`).join('; ')}));
+    }finally{p.close();}
+  }
+});
+test('source installation routes folder and ZIP pickers and cancellation leaves the listing alone',async()=>{
+  for(const mode of ['folder','files',null]){
+    const p=page();try{
+      const picked=[],commands=[];
+      const ui=new WebSourcesUI({pickFiles:async kind=>{picked.push(kind);return ['/tmp/download'];},invoke:async(command,args)=>{commands.push([command,args]);return {folder:'/tmp/sources',sources:[],settings:[],problems:[]};},changed:()=>{},report:()=>{},fail:error=>{throw error;}});
+      const pending=ui.install();
+      assert.equal(p.body.querySelector('dialog').getAttribute('aria-label'),'Install tag sources');
+      p.body.querySelector(`[data-${mode || 'cancel'}]`).click();await pending;
+      assert.deepEqual(picked,mode?[mode]:[]);
+      assert.deepEqual(commands,mode?[['web_sources_install',{paths:['/tmp/download']}]]:[]);
+      assert.equal(p.body.querySelector('dialog'),null);
     }finally{p.close();}
   }
 });
@@ -1360,6 +1374,26 @@ test('source dialogs keep authored accessible names through search and review wh
       assert.equal(dialog.querySelector('header').textContent,`${expected}: Help – Title`);assert.equal(dialog.querySelector('#ts-back').textContent,t.t('Back'));
       dialog.querySelector('#ts-back').click();p.translateTree(dialog);assert.equal(accessibleName(),expected);assert.equal(dialog.querySelector('header').textContent,expected);
       p.translate('en');assert.equal(accessibleName(),name);dialog.close();
+    }finally{p.close();}
+  }
+});
+test('scalar web-source TITLE reaches review and applies to the selected files through the existing album-wide fallback',async()=>{
+  for(const count of [1,2]){
+    const p=page();try{
+      const files=Array.from({length:count},(_,index)=>({path:`/Music/practice-${index+1}.flac`,name:`practice-${index+1}.flac`,title:'Before',artist:'Before Artist',album:'Before Album',album_artist:'',disc:'1',track:String(index+1),length:120})),applied=[];
+      const ui=new TagSourcesUI({files:()=>files,reason:()=>'',options:()=>({}),evaluate:async()=>'',apply:async(items,cover)=>{applied.push({items,cover});},invoke:async command=>{
+        if(command==='web_source_search')return{direct:true,columns:[],results:[{url:'https://example.invalid/practice'}]};
+        if(command==='web_source_release')return{provider:'web',id:'practice',url:'',artist:'Practice Artist',title:'',fields:{TITLE:['Practice Track'],ARTIST:['Practice Artist']},tracks:[],covers:[],more_covers:false};
+        throw new Error(command);
+      }});
+      await ui.open('web',{web:{id:'practice.src',name:'Practice source',search_by:[]}});
+      const dialog=p.body.querySelector('dialog');dialog.querySelector('#ts-search').click();
+      await p.window.happyDOM.waitUntilComplete();
+      assert.equal(dialog.querySelectorAll('.ts-matches tbody tr').length,count);
+      assert.equal(dialog.querySelector('#ts-apply').disabled,false);
+      assert.equal(dialog.querySelector('input[data-value="TITLE"]').value,'Practice Track');
+      dialog.querySelector('#ts-apply').click();await p.window.happyDOM.waitUntilComplete();
+      assert.deepEqual(applied,[{items:files.map(file=>({path:file.path,updates:{TITLE:['Practice Track'],ARTIST:['Practice Artist']}})),cover:null}]);
     }finally{p.close();}
   }
 });

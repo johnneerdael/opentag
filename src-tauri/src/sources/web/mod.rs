@@ -9,6 +9,7 @@
 #[cfg(test)]
 mod compat;
 mod engine;
+mod installer;
 mod source;
 
 use super::http::{self, Channel};
@@ -193,6 +194,16 @@ fn files_in(folder: &Path, prefix: &str, depth: usize, names: &mut Vec<String>) 
 /// Every source and configuration schema in `folder`, including those in
 /// subfolders.
 pub fn list(folder: &Path) -> Listing {
+    let _guard = installer::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    if let Err(error) = installer::recover(folder) {
+        return Listing {
+            problems: vec![Problem {
+                file: "sources".into(),
+                error,
+            }],
+            ..Listing::default()
+        };
+    }
     let mut listing = Listing {
         folder: folder.to_string_lossy().into_owned(),
         ..Listing::default()
@@ -349,6 +360,8 @@ fn debug_name(name: &str) -> String {
 
 /// Write debug files to `<sources>/debug`; returns that folder when any were written.
 fn write_debug(folder: &Path, files: &[engine::DebugFile]) -> Option<PathBuf> {
+    let _guard = installer::LOCK.lock().ok()?;
+    installer::recover(folder).ok()?;
     if files.is_empty() {
         return None;
     }
@@ -853,6 +866,8 @@ async fn prepare(
     let folder = folder(app)?;
     let id = id.to_owned();
     blocking(move || {
+        let _guard = installer::LOCK.lock().map_err(|e| e.to_string())?;
+        installer::recover(&folder)?;
         let file = load(&folder, &id)?;
         let vars = vars(&folder, &file)?;
         Ok((folder, file, vars))
@@ -866,31 +881,7 @@ pub async fn web_sources_list(app: tauri::AppHandle) -> Result<Listing, String> 
     blocking(move || Ok(list(&folder))).await
 }
 
-/// Copy `.src`, `.inc` and `.settings` files into the sources folder.
-fn install(folder: &Path, paths: &[String]) -> Result<(), String> {
-    if paths.is_empty() {
-        return Err("Choose at least one .src, .inc or .settings file.".into());
-    }
-    for path in paths {
-        let path = Path::new(path);
-        let name = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .ok_or_else(|| format!("{} has no usable file name", path.display()))?;
-        if !matches!(extension(name).as_str(), "src" | "inc" | "settings")
-            || plain_name(name).is_err()
-        {
-            return Err(format!("{name} is not a .src, .inc or .settings file"));
-        }
-        let metadata = std::fs::metadata(path).map_err(|e| format!("{name}: {e}"))?;
-        if !metadata.is_file() || metadata.len() > MAX_FILE_BYTES {
-            return Err(format!("{name} is not a file of at most 4 MB"));
-        }
-        let bytes = std::fs::read(path).map_err(|e| format!("{name}: {e}"))?;
-        crate::action_host::atomic_output(&folder.join(name), &bytes, false)?;
-    }
-    Ok(())
-}
+use installer::install;
 
 #[tauri::command]
 pub async fn web_sources_install(
@@ -914,7 +905,7 @@ pub async fn web_sources_install(
 pub async fn web_sources_open_folder(app: tauri::AppHandle) -> Result<(), String> {
     let folder = folder(&app)?;
     blocking(move || {
-        std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+        installer::prepare_folder_open(&folder)?;
         #[cfg(desktop)]
         return tauri_plugin_opener::open_path(&folder, None::<&str>).map_err(|e| e.to_string());
         #[cfg(mobile)]
@@ -1057,6 +1048,8 @@ pub async fn web_source_settings(
 ) -> Result<SettingsForm, String> {
     let folder = folder(&app)?;
     blocking(move || {
+        let _guard = installer::LOCK.lock().map_err(|e| e.to_string())?;
+        installer::recover(&folder)?;
         let schema = schema(&folder, &id)?;
         let values = settings_values(&schema, &stored_settings(&folder)?);
         Ok(SettingsForm { schema, values })
@@ -1067,6 +1060,8 @@ pub async fn web_source_settings(
 /// Keep the values the schema defines with the right type; other sources'
 /// entries in the shared settings file stay as they are.
 fn save_settings(folder: &Path, id: &str, values: Map<String, Value>) -> Result<(), String> {
+    let _guard = installer::LOCK.lock().map_err(|e| e.to_string())?;
+    installer::recover(folder)?;
     let schema = schema(folder, id)?;
     let mut checked = Map::new();
     for setting in value_settings(&schema) {

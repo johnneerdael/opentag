@@ -1511,6 +1511,36 @@ mod tests {
     }
 
     #[test]
+    fn boost_whole_subject_patterns_match_across_source_commands() {
+        let pattern = r"(?i)\APaper\s+Boats\z";
+        for (input, matched) in [
+            ("Paper Boats", true),
+            ("paper boats", true),
+            ("Paper Boats Live", false),
+        ] {
+            assert_eq!(
+                out(&format!(r#"SayRegexp "{pattern}""#), input),
+                if matched { input } else { "" }
+            );
+            assert_eq!(
+                out(
+                    &format!("RegexpReplace \"{pattern}\" \"matched\"\nSayRest"),
+                    input
+                ),
+                if matched { "matched" } else { input }
+            );
+        }
+        assert!(error(r#"SayRegexp "(""#, "Paper Boats")
+            .message
+            .contains("not valid"));
+        assert!(
+            error("RegexpReplace \"(\" \"matched\"\nSayRest", "Paper Boats")
+                .message
+                .contains("failed")
+        );
+    }
+
+    #[test]
     fn prefix_diagnostic_fixtures_execute_real_script_producers() {
         let cases: serde_json::Value = serde_json::from_str(include_str!(
             "../../../../tests/fixtures/web-scripting-diagnostics.json"
