@@ -57,6 +57,9 @@ jobs:
       - run: python3 -m unittest discover -s .github/scripts/tests -v
       - run: node --test tests/release.test.mjs
       - run: python3 -m unittest discover -s scripts/tests -p 'test_audio*.py' -v
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run save acceptance regression suite
+        run: python3 -m unittest discover -s scripts/tests -p 'test_save_acceptance.py' -v
       - run: python3 scripts/verify-brand.py
       - run: python3 scripts/audio-deps/test_build.py
   desktop:

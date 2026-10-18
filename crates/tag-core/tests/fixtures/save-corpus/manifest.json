@@ -1,0 +1,62 @@
+{
+  "provenance": "Independent synthetic 0.2 second mono 8000 Hz PCM; sample i = (i % 251) * 31 - 3900. No vendor/user media.",
+  "generator_commands": [
+    [
+      "ffmpeg",
+      "-v",
+      "error",
+      "-y",
+      "-i",
+      "crates/tag-core/tests/fixtures/save-corpus/tone.wav",
+      "-map_metadata",
+      "-1",
+      "-fflags",
+      "+bitexact",
+      "-flags:a",
+      "+bitexact",
+      "-c:a",
+      "libmp3lame",
+      "crates/tag-core/tests/fixtures/save-corpus/tone.mp3"
+    ],
+    [
+      "ffmpeg",
+      "-v",
+      "error",
+      "-y",
+      "-i",
+      "crates/tag-core/tests/fixtures/save-corpus/tone.wav",
+      "-map_metadata",
+      "-1",
+      "-fflags",
+      "+bitexact",
+      "-flags:a",
+      "+bitexact",
+      "-c:a",
+      "flac",
+      "crates/tag-core/tests/fixtures/save-corpus/tone.flac"
+    ],
+    [
+      "ffmpeg",
+      "-v",
+      "error",
+      "-y",
+      "-i",
+      "crates/tag-core/tests/fixtures/save-corpus/tone.wav",
+      "-map_metadata",
+      "-1",
+      "-fflags",
+      "+bitexact",
+      "-flags:a",
+      "+bitexact",
+      "-c:a",
+      "aac",
+      "crates/tag-core/tests/fixtures/save-corpus/tone.m4a"
+    ]
+  ],
+  "ffmpeg_version": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
+  "sha256": {
+    "tone.flac": "7e6aa7216d9a55452f7ad5bc6ff25982563ca3c180eb1a63d67edf7000701a6e",
+    "tone.m4a": "2a262b055ecabfab67c6a3577c6975331b889fa92c3970c71c88d413d91d73b8",
+    "tone.mp3": "ead54e24601bb08675dd0ce661287e33cab7f07aa9d329c45c6818f895ec4fc9"
+  }
+}
