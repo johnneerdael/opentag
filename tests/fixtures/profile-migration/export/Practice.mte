@@ -1,0 +1,1 @@
+$filename(txt,utf-8)$loop(1)%artist% - %title%$char(10)$loopend()

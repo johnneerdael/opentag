@@ -36,6 +36,7 @@ encoding_rs = "0.8"
 # Complete named HTML character references (also used by Tauri’s HTML toolchain).
 web_atoms = "0.2.6"
 tempfile = "3"
+zip = { version = "2.4", default-features = false, features = ["deflate"] }
 sha2 = "0.10"
 md-5 = "0.10"
 crc32fast = "1"

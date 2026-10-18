@@ -1,0 +1,60 @@
+{
+  "date": "2026-10-18",
+  "platform": "macOS arm64",
+  "authorship": "Independent synthetic profile; no original or community scripts included",
+  "input_sha256": "226b2ee7623207fe66c80cb293d8cf1ea96698fb2174abcca4efcc8efe8f7e75",
+  "source_base": "4a1a95ff4eddb9da7492aaace68197c4f81347d0",
+  "branding_sync_seen": "36d7dea4e7b930d3a7d98facaca8498d0ef7c8de",
+  "files": [
+    {
+      "file": "Mp3tagSettings.bin",
+      "bytes": 73,
+      "sha256": "3e7c25e0a74681d7bdb7c5dc0c3c48ca5e076444f8fa65a5e91f741702ce1a8e"
+    },
+    {
+      "file": "README.txt",
+      "bytes": 81,
+      "sha256": "33083a6d9adf9f72866ccc01a13e75e6405a54db093ca477e194ce954b9e364e"
+    },
+    {
+      "file": "columns.ini",
+      "bytes": 198,
+      "sha256": "a32b309f3a05f3f446a37097eb608eec7a4a5375c5ec14172405bcf5f8fe0d67"
+    },
+    {
+      "file": "data/actions/Needs review.mta",
+      "bytes": 48,
+      "sha256": "0e754aa9b22be35f7d326e07c56e95fe1b75c3f8755777ab457f9ef92b7a126f"
+    },
+    {
+      "file": "data/actions/Normalize.mta",
+      "bytes": 34,
+      "sha256": "8447a44e4549c4638dcfe90f57382d88a0b6524fa728354a684f23b9619b718a"
+    },
+    {
+      "file": "data/panels/Compact.ini",
+      "bytes": 48,
+      "sha256": "7f29707a8e50a8ff8bbeb04ea8cd627e6f940242a1b17ebe70092c153af1e5ad"
+    },
+    {
+      "file": "data/sources/Practice.src",
+      "bytes": 44,
+      "sha256": "ba4daf8e0d3cb1801877a892b02f77aefa01e0fff6f5a5eadc0e50675d501a5a"
+    },
+    {
+      "file": "export/Other.mte",
+      "bytes": 27,
+      "sha256": "1da8f2c9b63a30759abf01c479d0f97a997ee3a2647ed1c2baf519eed75ff59c"
+    },
+    {
+      "file": "export/Practice.mte",
+      "bytes": 65,
+      "sha256": "9fe73ad290f1c5737c9258c869e9451b7d557bc0ec04890389139e6cfdd264ac"
+    },
+    {
+      "file": "usrfields.ini",
+      "bytes": 162,
+      "sha256": "c829d4e233de45d294c3e7bb9cfd4f80c93afa451a458070ccef28747a5ba27d"
+    }
+  ]
+}

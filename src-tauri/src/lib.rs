@@ -25,6 +25,7 @@ mod managed_actions;
 mod mp3tag_columns;
 mod mp3tag_tag_panel;
 mod playlists;
+mod profile_migration;
 mod progress;
 mod rename_plan;
 mod settings;
@@ -1535,6 +1536,10 @@ pub fn run() {
             utilities::run_tool,
             utilities::export_configuration,
             utilities::import_configuration,
+            profile_migration::profile_migration_preview,
+            profile_migration::profile_migration_apply,
+            profile_migration::profile_migration_status,
+            profile_migration::profile_migration_restore,
             utilities::open_configuration_folder,
             languages::language_catalogs,
             languages::open_languages_folder,

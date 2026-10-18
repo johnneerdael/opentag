@@ -14,7 +14,7 @@ const result=await build({root,configFile:false,logLevel:'silent',plugins:[{name
   if(id.endsWith('/webview'))return 'export const getCurrentWebview=()=>({onDragDropEvent:async callback=>{globalThis.__BOOT_HOST__.drag=callback;return()=>{};}});';
   if(id.endsWith('/app'))return 'export const getVersion=async()=>"0.2.0";';
   if(id.endsWith('/event'))return 'export const listen=async(name,callback)=>{globalThis.__BOOT_HOST__.events.set(name,callback);return()=>{};};';
-  if(id.endsWith('/plugin-dialog'))return 'export const open=async()=>null;export const save=async()=>null;export const ask=async()=>false;export const message=async()=>{};export const confirm=async()=>false;';
+  if(id.endsWith('/plugin-dialog'))return 'export const open=async options=>{globalThis.__BOOT_HOST__.picks.push(options);return null;};export const save=async()=>null;export const ask=async()=>false;export const message=async()=>{};export const confirm=async()=>false;';
   throw new Error('Unexpected native module: '+id);
 }}],build:{write:false,minify:false,target:'es2022',lib:{entry:root+'src/main.ts',formats:['es']},rollupOptions:{output:{inlineDynamicImports:true}}}});
 const code=(Array.isArray(result)?result.flatMap(build=>build.output):result.output).find(output=>output.type==='chunk').code,url='data:text/javascript;base64,'+Buffer.from(code+'\n//# sourceURL=taggroove-startup-fixture.mjs').toString('base64');
@@ -22,14 +22,22 @@ let serial=0;
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
 async function until(predicate){for(let i=0;i<200;i++){if(predicate())return;await new Promise(resolve=>setTimeout(resolve,5));}assert.fail('Boot condition did not settle');}
 function deferred(){let resolve,reject,done=false;const promise=new Promise((yes,no)=>{resolve=value=>{done=true;yes(value);};reject=error=>{done=true;no(error);};});return{promise,resolve,reject,get done(){return done;}};}
-async function boot({native=true,remembered='fr',choice=remembered,preferred=['en-US'],updateCheck=false,platformFailure=false,subfolders=true}={}){
+async function boot({native=true,remembered='fr',choice=remembered,preferred=['en-US'],updateCheck=false,platformFailure=false,subfolders=true,profile=null,initialLaunches=[],rejectExtraProfileReads=false}={}){
   const window=new Window({url:'http://localhost:1420'});
   for(const key of ['window','document','Node','NodeFilter','Text','Element','HTMLElement','HTMLInputElement','HTMLTextAreaElement','HTMLButtonElement','HTMLSelectElement','HTMLDetailsElement','HTMLTableRowElement','HTMLImageElement','MutationObserver','MouseEvent','KeyboardEvent','Event','CSS','localStorage','navigator','getComputedStyle','requestAnimationFrame','cancelAnimationFrame'])Object.defineProperty(globalThis,key,{value:key==='window'?window:typeof window[key]==='function'&&['getComputedStyle','requestAnimationFrame','cancelAnimationFrame'].includes(key)?window[key].bind(window):window[key],configurable:true,writable:true});
   Object.defineProperty(window.navigator,'languages',{value:preferred,configurable:true});Object.defineProperty(window.navigator,'language',{value:preferred[0],configurable:true});
   window.document.documentElement.lang='en';window.document.body.innerHTML='<div id="app"></div>';window.localStorage.setItem('opentag.language',remembered);window.localStorage.setItem('opentag.last-version','0.2.0');
   const settings=deferred(),catalogs=deferred(),directories=deferred(),calls=[],events=new Map(),titles=[],paints=[];
-  const host={native,calls,events,drag:undefined,settings,catalogs,directories,defaults:undefined,scan:[],scanRecords:[],scanErrors:[],launches:[],nativeWindow:{setTitle:async title=>titles.push(title),setTheme:async()=>{},onCloseRequested:async()=>()=>{},isMaximized:async()=>false,isMinimized:async()=>false},invoke:async(command,args,factories)=>{
+  const recovery=profile?{id:'profile-receipt',attempted:false,window:{version:1,preferences:{'opentag.language':remembered},workspace:{paths:['/A.flac'],selected:['/A.flac'],roots:['/'],location:'/',location_is_data:true,filter:'',filter_draft:null,anchor:'/A.flac',playlist:null}}}:null;let pending=recovery,profileReads=0;
+  const host={native,calls,events,picks:[],profileCalls:[],get pending(){return pending;},drag:undefined,settings,catalogs,directories,defaults:undefined,scan:[],scanRecords:[],scanErrors:[],launches:structuredClone(initialLaunches),nativeWindow:{setTitle:async title=>titles.push(title),setTheme:async()=>{},onCloseRequested:async()=>()=>{},isMaximized:async()=>false,isMinimized:async()=>false},invoke:async(command,args,factories)=>{
     calls.push(command);host.defaults=factories;
+    if(command==='profile_migration_status'){
+      host.profileCalls.push(args);profileReads++;
+      if(rejectExtraProfileReads&&profileReads>1&&!args?.start&&!args?.ack)throw new Error('second status read refused');
+      if(args?.start){if(profile?.failure==='claim')throw new Error('controlled claim refusal');assert.equal(args.start,pending.id);pending.attempted=true;}
+      if(args?.ack){assert.equal(args.ack,pending.id);if(profile?.failure==='ack')throw new Error('controlled acknowledgement refusal');pending=null;}
+      return{desktop:true,phase:profile?'applied':'none',report:null,restorable:!!profile,pending:structuredClone(pending),preference_keys:profile?['opentag.language']:[]};
+    }
     if(command==='load_settings')return settings.promise;
     if(command==='language_catalogs')return catalogs.promise;
     if(command==='runtime_platform'){if(platformFailure)throw new Error('runtime unavailable');return{family:'desktop',folder_picker_supported:true,document_access_supported:false};}
@@ -40,7 +48,12 @@ async function boot({native=true,remembered='fr',choice=remembered,preferred=['e
     if(command==='web_sources_list')return{folder:'',sources:[],settings:[],problems:[]};
     if(command==='load_directory_state')return directories.promise;
     if(command==='take_launch_requests')return host.launches.splice(0);
-    if(command==='scan_files'){host.scan.push(args.paths);host.scanRecords.push(args);return{entries:[],errors:host.scanErrors};}
+    if(command==='scan_files'){
+      host.scan.push(args.paths);host.scanRecords.push(args);
+      if(profile&&args.paths.includes('/A.flac')&&profile.failure==='scan')return{entries:[],errors:[{path:'/A.flac',error:'controlled missing recovery file'}]};
+      return{entries:profile?args.paths.map(path=>{path=path.endsWith('.flac')?path:path+'/track.flac';return{path,filename:path.split('/').at(-1),format:'FLAC',duration:1,bitrate:128,sample_rate:44100,channels:2,size:4096,fields:{TITLE:[path]},covers:[]};}):[],errors:host.scanErrors};
+    }
+    if(command==='evaluate_columns'&&profile)return{values:args.items.map(()=>args.templates.map(()=>'')),errors:[]};
     if(command==='check_for_updates')return{current:'0.2.0',latest:{version:'0.2.1',name:'TagGroove',url:'https://example.invalid/release',prerelease:false,published:null},newer:true};
     if(command==='history_state')return{undo:null,redo:null,notice:null};
     if(command==='notification_area_supported')return false;
@@ -53,7 +66,7 @@ async function boot({native=true,remembered='fr',choice=remembered,preferred=['e
   let frame=0;
   const observer=new window.MutationObserver(()=>{if(frame||paints.length)return;frame=window.requestAnimationFrame(()=>{frame=0;if(visible()&&app.querySelector('[data-menu="File"]'))paints.push({file:app.querySelector('[data-menu="File"] > summary').textContent,language:window.document.documentElement.lang});});});observer.observe(window.document.body,{subtree:true,childList:true,characterData:true,attributes:true});
   await import(url+'#boot-'+serial++);await tick();
-  const response=()=>{const value=host.defaults.defaultSettings();value.pages.language={language:choice};value.directories.subfolders=subfolders;value.pages.directories={startup:'favorite'};value.pages.updates={check_on_startup:updateCheck,release_notes:false};return{settings:value,defaults:host.defaults.defaultSettings(),warning:null};};
+  const response=()=>{const value=host.defaults.defaultSettings();value.pages.language={language:choice};value.directories.subfolders=subfolders;value.pages['directories-startup']={startup:'favorite'};value.pages.updates={check_on_startup:updateCheck,release_notes:false};return{settings:value,defaults:host.defaults.defaultSettings(),warning:null};};
   return{window,host,app,visible,titles,paints,response,async close(){if(!settings.done)settings.resolve(response());if(!catalogs.done)catalogs.resolve({catalogs:[],errors:[]});if(!directories.done)directories.resolve(host.defaults.defaultDirectoryState());for(let i=0;i<8;i++)await tick();observer.disconnect();if(frame)window.cancelAnimationFrame(frame);await window.happyDOM.abort();}};
 }
 
@@ -178,4 +191,59 @@ test('overlapping real Options saves still apply tag preferences saved before th
 test('browser preview keeps its immediate first render without native initialization',async()=>{
   const fixture=await boot({native:false,remembered:'en'});
   try{assert.equal(fixture.visible(),true);assert.equal(fixture.app.querySelector('[data-menu="File"] > summary').textContent,'File');assert.deepEqual(fixture.host.calls.filter(command=>['load_settings','language_catalogs','runtime_platform'].includes(command)),[]);}finally{await fixture.close();}
+});
+
+async function finishProfileBoot(fixture){
+  fixture.host.settings.resolve(fixture.response());await until(()=>fixture.host.calls.includes('language_catalogs'));
+  fixture.host.catalogs.resolve({catalogs:[],errors:[]});fixture.host.directories.resolve({version:1,recent:[],favorites:['/fallback']});
+}
+test('verified no-journal bootstrap initializes normally without a redundant fallible second status read',async()=>{
+  const fixture=await boot({remembered:'en',choice:'en',subfolders:false,rejectExtraProfileReads:true});
+  try{
+    await finishProfileBoot(fixture);await until(()=>fixture.visible()&&fixture.host.scan.length>0);
+    assert.equal(fixture.host.profileCalls.length,1);assert.equal(fixture.app.inert,false);assert.ok(fixture.app.querySelector('[data-op="options"]'));
+    assert.equal(fixture.host.scanRecords[0].recursive,false,'saved preferences initialized before file opening');
+  }finally{await fixture.close();}
+});
+test('pending workspace A restores before an explicit queued B launch, preserving replace and add intent',async()=>{
+  for(const add of [false,true]){
+    const fixture=await boot({remembered:'en',choice:'en',profile:{},initialLaunches:[{directories:[],files:['/B.flac'],add}]});
+    try{
+      assert.deepEqual(fixture.host.scan,[]);await finishProfileBoot(fixture);await until(()=>!fixture.app.inert&&fixture.app.querySelector('tr[data-path="/B.flac"]'));
+      assert.deepEqual(fixture.host.scan,[['/A.flac'],['/B.flac']]);assert.equal(!!fixture.app.querySelector('tr[data-path="/A.flac"]'),add);assert.equal(fixture.host.pending,null);
+      assert.ok(fixture.host.calls.indexOf('take_launch_requests')>fixture.host.calls.indexOf('scan_files'));
+    }finally{await fixture.close();}
+  }
+});
+test('successful workspace recovery suppresses only favorite fallback when no explicit launch is queued',async()=>{
+  const fixture=await boot({remembered:'en',choice:'en',profile:{}});
+  try{
+    await finishProfileBoot(fixture);await until(()=>!fixture.app.inert&&fixture.host.calls.includes('take_launch_requests'));
+    assert.deepEqual(fixture.host.scan,[['/A.flac']]);assert.ok(fixture.app.querySelector('tr[data-path="/A.flac"]'));assert.equal(fixture.host.pending,null);
+  }finally{await fixture.close();}
+});
+test('failed workspace reads retain the attempted receipt and still admit explicit launches or the existing favorite fallback',async()=>{
+  for(const explicit of [false,true]){
+    const fixture=await boot({remembered:'en',choice:'en',profile:{failure:'scan'},initialLaunches:explicit?[{directories:[],files:['/B.flac'],add:false}]:[]});
+    try{
+      await finishProfileBoot(fixture);const path=explicit?'/B.flac':'/fallback/track.flac';await until(()=>!fixture.app.inert&&fixture.app.querySelector(`tr[data-path="${path}"]`));
+      assert.deepEqual(fixture.host.scan,[['/A.flac'],[explicit?'/B.flac':'/fallback']]);assert.equal(fixture.host.pending.attempted,true);assert.ok(!fixture.host.profileCalls.some(args=>args?.ack));
+      assert.match(fixture.app.querySelector('.errors').textContent,/Open Restore setup to retry/);
+    }finally{await fixture.close();}
+  }
+});
+test('an ambiguous workspace claim failure exposes a blocking retry and never drains newer explicit launches',async()=>{
+  const fixture=await boot({remembered:'en',choice:'en',profile:{failure:'claim'},initialLaunches:[{directories:[],files:['/B.flac'],add:false}]});
+  try{
+    await finishProfileBoot(fixture);await until(()=>fixture.app.querySelector('.profile-recovery-dialog[open]'));
+    assert.match(fixture.app.textContent,/controlled claim refusal/);assert.equal(fixture.app.querySelector('button').textContent,'Retry startup recovery');assert.deepEqual(fixture.host.scan,[]);assert.ok(!fixture.host.calls.includes('take_launch_requests'));assert.ok(fixture.host.pending);
+    fixture.window.document.dispatchEvent(new fixture.window.KeyboardEvent('keydown',{key:'d',ctrlKey:true,bubbles:true,cancelable:true}));await tick();assert.deepEqual(fixture.host.picks,[],'modal recovery prevents background file-picker shortcuts');
+  }finally{await fixture.close();}
+});
+test('acknowledgement failure retains an actionable receipt without replacing the already restored workspace with a favorite',async()=>{
+  const fixture=await boot({remembered:'en',choice:'en',profile:{failure:'ack'}});
+  try{
+    await finishProfileBoot(fixture);await until(()=>!fixture.app.inert&&fixture.app.querySelector('tr[data-path="/A.flac"]'));
+    assert.deepEqual(fixture.host.scan,[['/A.flac']]);assert.equal(fixture.host.pending.attempted,true);assert.match(fixture.app.querySelector('.errors').textContent,/Open Restore setup to retry/);
+  }finally{await fixture.close();}
 });

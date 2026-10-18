@@ -4,6 +4,11 @@ Save a configuration before reorganizing your workspace, changing many options,
 or moving to another computer. The bundle preserves supported **saved
 configuration**. It is separate from saving tag edits and backing up music.
 
+For a user-owned Mp3tag folder/ZIP, use the separate [guided setup import and
+local restore point](../getting-started/coming-from-mp3tag.md). Its recovery
+snapshot includes physical export templates and supported window/workspace
+state. The named JSON backup described here retains its existing smaller scope.
+
 ## Make a named configuration backup
 
 1. Finish the configuration dialogs you want to preserve: choose **OK** or
@@ -34,7 +39,7 @@ they already exist in the current configuration folder:
 | --- | --- |
 | `settings.json` | Saved Options, including tool definitions, toolbar/layout preferences and other option pages |
 | `actions.json` | Saved action groups and their definitions/order/state |
-| `exports.json` | Saved export configurations |
+| `exports.json` | Saved export identities/preferences; keep the physical `export/` template files separately |
 | `columns.json` | File-list column configuration |
 | `tag-panel.json` | Tag-panel field configuration |
 | `directories.json` | Favorite and recent directories |
@@ -50,6 +55,7 @@ inside it.
 - Audio files and their backups, including artwork already embedded in them.
 - Pending tag edits and unsaved configuration-dialog changes.
 - Discogs access credentials: the access token is deliberately excluded.
+- Physical `export/` templates, browser/window preferences and the current loaded file list.
 - Installed web-source files, externally referenced images/text files and
   other resources outside the supported saved components.
 - Library-cache data, session Undo snapshots, and provider-document access or
