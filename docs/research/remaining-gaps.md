@@ -6,6 +6,12 @@ Method: the original audit compared every documentation page against the code. O
 
 Legend: **Impact** H = daily tagging, M = regular, L = rare or legacy. **Size** S = hours, M = a day or two, L = a batch of its own.
 
+Reconciliation on 2026-10-18: removed the stale APE header-less/tag-collision
+implementation gap after rerunning all three existing regressions. The
+[bounded evidence](../verification/ape-ledger-reconciliation.md) establishes
+TagGroove behavior on synthetic fixtures; comparison with original-written
+files and the original executable remains open.
+
 ## Open items
 
 | Area | Item | Detail | Impact | Size |
@@ -46,7 +52,6 @@ Legend: **Impact** H = daily tagging, M = regular, L = rare or legacy. **Size** 
 | Formats | Native-field limits | Text `UNIQUEFILEID` values require an owner and an identifier of at most 64 bytes, one per owner; binary identifiers stay opaque. `UNSYNCEDLYRICS <description>` accepts one text per language and description. Original-executable syntax and grouping equivalence remain unverified ([formats-edge](../verification/formats-edge.md), [CRITICAL-MAPPING](../CRITICAL-MAPPING.md)) | L | M |
 | Matroska | Edge cases | `TRACK` such as `3/12` is stored in `PART_NUMBER` without a `TOTAL_PARTS` split; a file without a SeekHead gets unindexed Tags, and a SeekHead with no spare room fails the write; the Segment Info title is not shown; chapters bound to other segments or ordered editions are kept but not interpreted ([formats-dsd-mkv](../verification/formats-dsd-mkv.md)) | L | M |
 | Formats | ASF/WMA | Headers over 512 MiB are refused; every write rewrites the whole file | L | M |
-| Formats | APE | A 131-byte APE tag whose items put "TAG" where ID3v1 starts is misread; header-less APEv2 tags are mishandled ([formats-edge](../verification/formats-edge.md)) | L | S |
 | Formats | Tag kinds | ID3v2 on Ape/Mpc files is not displayed (it can be removed); WAV/AIFF ID3v2 keeps its existing revision; removing ID3v1 does not remove a dependent Lyrics3 tag | M | S |
 | Tag preferences | Defaults | Write and remove defaults, cross-kind mirroring, ID3v1 truncation, multi-value joining and the encoding of existing Latin-1 frames in UTF-16 mode are not captured from the original ([tag-preferences](../verification/tag-preferences.md)) | M | S |
 | Chapters | Whole-file commands | Remove tag and Strip chapters MP4 are refused on chapter and cue rows; `%_subsong%` base and Nero field-name case are unconfirmed | L | S |
