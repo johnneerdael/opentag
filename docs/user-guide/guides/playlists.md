@@ -14,7 +14,7 @@ and return to whole audio files before creating playlists.
 
 1. Save or deliberately discard pending edits before replacing the list.
 2. Choose **File → Load playlist/cue sheet…** and select a `.m3u`, `.m3u8`,
-   `.pls` or `.cue` file. Inspect the pending-edit prompt if one appears.
+   `.pls`, `.cue`, `.xspf`, `.wpl` or `.asx` file. Inspect the pending-edit prompt if one appears.
 3. Check the loaded rows and error messages. Missing references can be
    reported while other valid entries are loaded.
 
@@ -47,6 +47,20 @@ TagGroove resolves two unique local files, in the order `02 - Low Tide.wav`,
 then `01 - Paper Boats.wav`. It reports `missing.wav` on line 5 and the HTTP
 entry on line 6. It does not fetch that URL as an audio stream. Actual audio
 reading can report further errors after reference resolution.
+
+## Read XML playlists
+
+XSPF version 1, static WPL and XML ASX version 3 can be loaded through the same
+command or file-drop path. Tracks retain document order. Multiple XSPF
+`location` elements or ASX `REF` elements within one track are alternatives;
+only the first resolvable local file is loaded for that track. XML playlists
+are read-only formats here: save new playlists as `.m3u`, `.m3u8` or `.pls`.
+
+See [XML playlist rules and examples](xml-playlists.md) for URI escaping,
+local XML Base, unsupported smart/active instructions and error behavior.
+A fatal XML parse or encoding error keeps the previous list unchanged. A
+valid playlist with missing/unsupported entries can still load its other files
+and report those entries. A valid empty list can replace the list with no rows.
 
 ## Add files and choose the order
 

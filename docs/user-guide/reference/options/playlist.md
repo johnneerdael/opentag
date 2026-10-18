@@ -21,6 +21,11 @@ For `ARTIST=Juniper Vale`, `TITLE=Harbour Lights`, the label is `Juniper Vale - 
 
 The actual output location and common filesystem roots determine whether relative paths are possible. Paths across different Windows drives cannot always be represented relatively. Test a generated playlist after moving its folder as a unit; a relative playlist still breaks if its audio files are moved independently.
 
+XSPF (`.xspf`), WPL (`.wpl`) and XML ASX (`.asx`) are input-only formats. The
+writer refuses these suffixes rather than putting M3U text in an XML-named
+file. Use `.m3u`, `.m3u8` or `.pls` for output. See
+[XML playlist examples](../../guides/xml-playlists.md).
+
 ## Automatic playlists
 
 **Create playlist automatically after saving tags or renaming files** defaults to off. Enable to regenerate the configured playlist after those operations. Automatic creation uses the saved configuration without asking for a filename each time.

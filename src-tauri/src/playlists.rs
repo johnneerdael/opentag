@@ -607,4 +607,69 @@ mod tests {
             "1.wav\r\n"
         );
     }
+    #[test]
+    fn xml_playlist_ipc_loads_real_audio_in_document_order_before_the_existing_scan() {
+        let (directory, files) = fixture(&["second.wav", "first.wav"]);
+        let root = dunce::canonicalize(directory.path()).unwrap();
+        for (extension, text) in [
+            (
+                "xspf",
+                r#"<playlist xmlns="http://xspf.org/ns/0/" version="1"><trackList><track><location>second.wav</location></track><track><location>first.wav</location></track></trackList></playlist>"#,
+            ),
+            (
+                "wpl",
+                r#"<smil><body><seq><media src="second.wav"/><media src="first.wav"/></seq></body></smil>"#,
+            ),
+            (
+                "asx",
+                r#"<ASX VERSION="3.0"><ENTRY><REF HREF="second.wav"/></ENTRY><ENTRY><REF HREF="first.wav"/></ENTRY></ASX>"#,
+            ),
+        ] {
+            let playlist = root.join(format!("list.{extension}"));
+            std::fs::write(&playlist, text).unwrap();
+            let loaded = tauri::async_runtime::block_on(ipc::read_playlist_with_diagnostics(
+                playlist.to_string_lossy().into_owned(),
+            ))
+            .unwrap();
+            assert_eq!(loaded.result.files, files);
+            assert!(loaded.result.errors.is_empty());
+            let scanned = tauri::async_runtime::block_on(crate::scan_files(
+                loaded.result.files,
+                false,
+                None,
+                Some(true),
+            ))
+            .unwrap();
+            assert!(scanned.errors.is_empty(), "{:?}", scanned.errors);
+            assert_eq!(
+                scanned
+                    .entries
+                    .iter()
+                    .map(|entry| entry.path.clone())
+                    .collect::<Vec<_>>(),
+                files
+            );
+        }
+    }
+    #[test]
+    fn xml_output_suffix_is_refused_by_the_existing_create_flow_without_a_file() {
+        let (directory, files) = fixture(&["one.wav"]);
+        let target = directory.path().join("output.xspf");
+        let request = request(&files, &target.to_string_lossy());
+        let result = create(
+            &request,
+            &evaluation::EvaluationSettings::default(),
+            &PlaylistOptions::default(),
+        );
+        assert!(matches!(result, Err(error) if error.contains("read-only")));
+        assert!(!target.exists());
+        std::fs::write(&target, b"keep existing playlist").unwrap();
+        assert!(create(
+            &request,
+            &evaluation::EvaluationSettings::default(),
+            &PlaylistOptions::default()
+        )
+        .is_err());
+        assert_eq!(std::fs::read(&target).unwrap(), b"keep existing playlist");
+    }
 }

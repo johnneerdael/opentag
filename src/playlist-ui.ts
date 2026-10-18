@@ -11,7 +11,7 @@ export type PlaylistContents={files:string[];errors:FileError[]};
 export type ExpandedPaths={paths:string[];errors:FileError[];playlist?:string};
 export type PlaylistScope='all'|'selected';
 
-export const PLAYLIST_EXTENSIONS=['m3u','m3u8','pls','cue'];
+export const PLAYLIST_EXTENSIONS=['m3u','m3u8','pls','cue','xspf','wpl','asx'];
 /** Whether a dropped, opened or command-line path is a playlist or cue sheet. */
 export function isPlaylistPath(path:string){const match=/\.([^.\\/]+)$/.exec(path);return !!match&&PLAYLIST_EXTENSIONS.includes(match[1].toLowerCase());}
 

@@ -4360,6 +4360,7 @@ dependencies = [
  "libc",
  "lofty",
  "num-format",
+ "quick-xml",
  "rand 0.9.5",
  "regex",
  "regex-compat",
@@ -4367,6 +4368,7 @@ dependencies = [
  "serde_json",
  "sys-locale",
  "tempfile",
+ "url",
  "uuid",
  "walkdir",
 ]

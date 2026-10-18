@@ -225,6 +225,7 @@ nav:
     - Template gallery: export/template-gallery.md
     - Export CSV: export/csv.md
     - Playlists and cue sheets: guides/playlists.md
+    - Local XML playlists: guides/xml-playlists.md
   - Tag sources:
     - Search, review and save: tag-sources/index.md
     - Discogs: tag-sources/discogs.md

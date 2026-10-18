@@ -2,14 +2,20 @@
 //! (https://docs.mp3tag.de/playlists/).
 //!
 //! Reading resolves the entries of `.m3u`, `.m3u8`, `.pls` and `.cue` files to
-//! local paths in playlist order. Writing renders `.m3u`/`.m3u8` (optionally
+//! local paths in playlist order. Static `.xspf`, `.wpl` and XML `.asx` readers
+//! share the resolution pipeline, with local-only URI rules and alternatives.
+//! Writing renders `.m3u`/`.m3u8` (optionally
 //! with `#EXTINF` extended info) and `.pls` playlists.
 
 use crate::batch_errors::{BatchError, Detailed, ErrorCause, IndexedDiagnostic};
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
+mod xml;
 
 /// File extensions that are loaded as playlists or cue sheets.
-pub const PLAYLIST_EXTENSIONS: [&str; 4] = ["m3u", "m3u8", "pls", "cue"];
+pub const PLAYLIST_EXTENSIONS: [&str; 7] = ["m3u", "m3u8", "pls", "cue", "xspf", "wpl", "asx"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PlaylistKind {
@@ -29,7 +35,8 @@ fn extension(path: &Path) -> String {
         .unwrap_or_default()
 }
 
-/// The playlist kind of a file name, or `None` for other files.
+/// The legacy text playlist kind. XML readers use `load_playlist` directly;
+/// retain the flat parsing/writing API and cue-sheet comparisons unchanged.
 pub fn playlist_kind(path: &Path) -> Option<PlaylistKind> {
     match extension(path).as_str() {
         "m3u" => Some(PlaylistKind::M3u),
@@ -317,33 +324,224 @@ fn push_missing(report: &mut Detailed<LoadedPlaylist>, line: usize, cause: Error
     report.result.missing.push((line, error));
 }
 
+const MAX_XML_URI: usize = 64 * 1024;
+type XmlBase = std::sync::Arc<Result<url::Url, ErrorCause>>;
+
+#[derive(Clone, Debug)]
+enum SourceLocation {
+    Legacy(String),
+    Xml {
+        value: String,
+        base: XmlBase,
+        uri: bool,
+    },
+}
+#[derive(Clone, Debug)]
+struct InputEntry {
+    line: usize,
+    locations: Result<Vec<SourceLocation>, ErrorCause>,
+}
 fn resolve_entries_diagnostic(
     entries: &[RawEntry],
     playlist_directory: &Path,
     exists: impl Fn(&Path) -> bool,
 ) -> Detailed<LoadedPlaylist> {
+    let entries: Vec<_> = entries
+        .iter()
+        .map(|entry| InputEntry {
+            line: entry.line,
+            locations: Ok(vec![SourceLocation::Legacy(entry.location.clone())]),
+        })
+        .collect();
+    resolve_input_entries(&entries, playlist_directory, exists)
+}
+/// Share ordering, alternative selection, deduplication and indexed errors for
+/// every reader; preserve the legacy single-location wrapper and its messages.
+fn resolve_input_entries(
+    entries: &[InputEntry],
+    playlist_directory: &Path,
+    exists: impl Fn(&Path) -> bool,
+) -> Detailed<LoadedPlaylist> {
     let mut loaded = Detailed::plain(LoadedPlaylist::default());
+    let mut seen = HashSet::new();
     for entry in entries {
-        match entry_candidates_diagnostic(&entry.location, playlist_directory) {
-            Ok(candidates) => match candidates.iter().find(|path| exists(path)) {
-                Some(path) => {
-                    if !loaded.result.files.contains(path) {
-                        loaded.result.files.push(path.clone());
-                    }
-                }
-                None => push_missing(
+        let locations = match &entry.locations {
+            Ok(locations) if !locations.is_empty() => locations,
+            Ok(_) => {
+                push_missing(
                     &mut loaded,
                     entry.line,
-                    ErrorCause::message(
-                        "{location}: file not found",
-                        [("location", entry.location.clone())],
-                    ),
+                    ErrorCause::owned("The playlist entry has no media location"),
+                );
+                continue;
+            }
+            Err(cause) => {
+                push_missing(&mut loaded, entry.line, cause.clone());
+                continue;
+            }
+        };
+        let mut failures = Vec::new();
+        let mut found = None;
+        for location in locations {
+            let (authored, candidates) = match location {
+                SourceLocation::Legacy(value) => (
+                    value,
+                    entry_candidates_diagnostic(value, playlist_directory),
                 ),
-            },
-            Err(error) => push_missing(&mut loaded, entry.line, error),
+                SourceLocation::Xml { value, base, uri } => {
+                    (value, xml_candidates(value, base, *uri, playlist_directory))
+                }
+            };
+            match candidates {
+                Ok(candidates) => match candidates.into_iter().find(|path| exists(path)) {
+                    Some(path) => {
+                        found = Some(path);
+                        break;
+                    }
+                    None => failures.push(ErrorCause::message(
+                        "{location}: file not found",
+                        [("location", authored.clone())],
+                    )),
+                },
+                Err(cause) => failures.push(cause),
+            }
+        }
+        if let Some(path) = found {
+            if seen.insert(path.clone()) {
+                loaded.result.files.push(path);
+            }
+        } else {
+            let cause = if failures.len() == 1 {
+                failures.remove(0)
+            } else {
+                ErrorCause::children(
+                    "No usable local alternative: {cause}",
+                    [("cause", ErrorCause::joined(failures, "; "))],
+                )
+            };
+            push_missing(&mut loaded, entry.line, cause);
         }
     }
     loaded
+}
+fn network_prefix(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() >= 2 && matches!(bytes[0], b'/' | b'\\') && matches!(bytes[1], b'/' | b'\\')
+}
+fn xml_candidates(
+    value: &str,
+    base: &XmlBase,
+    uri: bool,
+    directory: &Path,
+) -> Result<Vec<PathBuf>, ErrorCause> {
+    let value = value.trim();
+    if value.len() > MAX_XML_URI {
+        return Err(ErrorCause::owned("XML playlist URI size limit exceeded"));
+    }
+    if value.is_empty() {
+        return Err(ErrorCause::owned(
+            "The playlist entry has no media location",
+        ));
+    }
+    if network_prefix(value) {
+        return Err(ErrorCause::message(
+            "{location}: network shares are not supported by XML playlists",
+            [("location", value.into())],
+        ));
+    }
+    let windows_drive = value.as_bytes().get(1) == Some(&b':')
+        && value.starts_with(|c: char| c.is_ascii_alphabetic());
+    if !uri && windows_drive {
+        if !is_windows_absolute(value) {
+            return Err(ErrorCause::message(
+                "{location}: Windows drive paths must be absolute",
+                [("location", value.into())],
+            ));
+        }
+        if !cfg!(windows) {
+            return Err(ErrorCause::message(
+                "{location}: Windows drive paths require Windows",
+                [("location", value.into())],
+            ));
+        }
+        return entry_candidates_diagnostic(value, directory);
+    }
+    let scheme = value.split_once(':').is_some_and(|(prefix, _)| {
+        !prefix.is_empty()
+            && prefix.starts_with(|c: char| c.is_ascii_alphabetic())
+            && prefix
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+    });
+    if uri || scheme {
+        if percent_decode(value).is_none() || value.contains('\\') {
+            return Err(ErrorCause::message(
+                "{location}: invalid XML playlist URI",
+                [("location", value.into())],
+            ));
+        }
+        let resolved = base
+            .as_ref()
+            .as_ref()
+            .map_err(Clone::clone)?
+            .join(value)
+            .map_err(|_| {
+                ErrorCause::message(
+                    "{location}: invalid XML playlist URI",
+                    [("location", value.into())],
+                )
+            })?;
+        Ok(vec![local_xml_uri(&resolved, value)?])
+    } else {
+        // Encoded leading separators may be an authored literal filename, but
+        // must never introduce an implicit UNC fallback during path decoding.
+        if percent_decode(value).is_some_and(|decoded| network_prefix(&decoded)) {
+            return Ok(vec![normalize(&directory.join(value))]);
+        }
+        entry_candidates_diagnostic(value, directory)
+    }
+}
+fn local_xml_uri(uri: &url::Url, authored: &str) -> Result<PathBuf, ErrorCause> {
+    if uri.as_str().len() > MAX_XML_URI {
+        return Err(ErrorCause::owned(
+            "XML playlist resolved URI size limit exceeded",
+        ));
+    }
+    if uri.scheme() != "file" {
+        return Err(ErrorCause::message(
+            "{location}: only local file URIs are supported by XML playlists",
+            [("location", authored.into())],
+        ));
+    }
+    if uri
+        .host_str()
+        .is_some_and(|host| !host.eq_ignore_ascii_case("localhost"))
+        || uri.path().starts_with("//")
+    {
+        return Err(ErrorCause::message(
+            "{location}: non-local file URI authority is not supported",
+            [("location", authored.into())],
+        ));
+    }
+    if uri.query().is_some() || uri.fragment().is_some() {
+        return Err(ErrorCause::message(
+            "{location}: URI queries and fragments are not supported by XML playlists",
+            [("location", authored.into())],
+        ));
+    }
+    let path = uri.to_file_path().map_err(|_| {
+        ErrorCause::message(
+            "{location}: file URI cannot be used on this platform",
+            [("location", authored.into())],
+        )
+    })?;
+    if network_prefix(&path.to_string_lossy()) {
+        return Err(ErrorCause::message(
+            "{location}: non-local file URI authority is not supported",
+            [("location", authored.into())],
+        ));
+    }
+    Ok(path)
 }
 
 /// Read a playlist or cue sheet file from disk.
@@ -357,6 +555,14 @@ pub fn load_playlist_diagnostic(
     path: &Path,
     ansi_codepage: Option<&str>,
 ) -> Result<Detailed<LoadedPlaylist>, String> {
+    if let Some(kind) = xml::Kind::from_path(path) {
+        let entries = xml::read(path, kind)?;
+        return Ok(resolve_input_entries(
+            &entries,
+            path.parent().unwrap_or(Path::new(".")),
+            |path| path.is_file(),
+        ));
+    }
     let kind = playlist_kind(path)
         .ok_or_else(|| format!("{} is not a playlist or cue sheet", path.display()))?;
     let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -466,6 +672,9 @@ pub fn render_playlist(
     items: &[PlaylistItem],
     options: &PlaylistWriteOptions,
 ) -> Result<Vec<u8>, String> {
+    if xml::Kind::from_path(target).is_some() {
+        return Err("XML playlists are read-only; write .m3u, .m3u8 or .pls instead".into());
+    }
     let kind = playlist_kind(target).unwrap_or(PlaylistKind::M3u8);
     let mut text = String::new();
     let mut entries = Vec::with_capacity(items.len());
@@ -989,5 +1198,60 @@ mod tests {
                 target.display()
             );
         }
+    }
+    #[test]
+    fn xml_resolution_never_attempts_mixed_or_percent_encoded_network_paths() {
+        let directory = tempfile::tempdir().unwrap();
+        let base = url::Url::from_file_path(directory.path().join("list.wpl")).unwrap();
+        let locations = [
+            r"\/remote.invalid/share/song.wav",
+            r"/\remote.invalid/share/song.wav",
+            "%5C%5Cremote.invalid%5Cshare%5Csong.wav",
+            "file:///%2Fremote.invalid/share/song.wav",
+        ];
+        for value in locations {
+            let entries = [InputEntry {
+                line: 1,
+                locations: Ok(vec![SourceLocation::Xml {
+                    value: value.into(),
+                    base: std::sync::Arc::new(Ok(base.clone())),
+                    uri: value.starts_with("file:"),
+                }]),
+            }];
+            let loaded = resolve_input_entries(&entries, directory.path(), |path| {
+                assert!(
+                    !network_prefix(&path.to_string_lossy()),
+                    "network path reached filesystem predicate: {}",
+                    path.display()
+                );
+                false
+            });
+            assert!(loaded.result.files.is_empty());
+            assert_eq!(loaded.result.missing.len(), 1);
+        }
+    }
+    #[test]
+    fn oversized_joined_xml_location_never_reaches_filesystem_probe() {
+        let base = std::sync::Arc::new(Ok(url::Url::parse(&format!(
+            "file:///tmp/{}/",
+            "a".repeat(33_000)
+        ))
+        .unwrap()));
+        let entries = [InputEntry {
+            line: 1,
+            locations: Ok(vec![SourceLocation::Xml {
+                value: format!("{}.wav", "b".repeat(33_000)),
+                base,
+                uri: true,
+            }]),
+        }];
+        let report = resolve_input_entries(&entries, Path::new("/tmp"), |_| {
+            panic!("oversized resolved URI reached filesystem probe")
+        });
+        assert!(report.result.files.is_empty());
+        assert_eq!(report.result.missing.len(), 1);
+        assert!(report.result.missing[0]
+            .1
+            .contains("resolved URI size limit"));
     }
 }
