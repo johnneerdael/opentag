@@ -20,6 +20,11 @@ pub struct DirectoryState {
     pub recent: Vec<String>,
     /// The first favorite is the one used by File → Favorite directory and startup.
     pub favorites: Vec<String>,
+    /// Copy and Move remember their successful destinations independently.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub copy_destination: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub move_destination: Option<String>,
 }
 impl Default for DirectoryState {
     fn default() -> Self {
@@ -27,6 +32,8 @@ impl Default for DirectoryState {
             version: 1,
             recent: vec![],
             favorites: vec![],
+            copy_destination: None,
+            move_destination: None,
         }
     }
 }
@@ -46,6 +53,11 @@ pub fn normalize(mut state: DirectoryState) -> Result<DirectoryState, String> {
     state.recent = unique(state.recent);
     state.recent.truncate(RECENT_LIMIT);
     state.favorites = unique(state.favorites);
+    // Native folder names may contain leading/trailing whitespace. Keep the
+    // selected path verbatim instead of changing which folder it names.
+    let destination = |value: Option<String>| value.filter(|path| !path.is_empty());
+    state.copy_destination = destination(state.copy_destination);
+    state.move_destination = destination(state.move_destination);
     Ok(state)
 }
 pub fn remember(mut state: DirectoryState, directories: &[String]) -> DirectoryState {
@@ -633,6 +645,36 @@ mod tests {
             ..Default::default()
         })
         .is_err());
+    }
+
+    #[test]
+    fn directory_state_preserves_transfer_destinations() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("directories.json");
+        std::fs::write(
+            &path,
+            r#"{"version":1,"recent":["/recent"],"favorites":["/favorite"],"copy_destination":"/copy","move_destination":"/move"}"#,
+        )
+        .unwrap();
+        let restored = load(&path).unwrap();
+        save(&path, restored).unwrap();
+        let saved: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(saved["copy_destination"], "/copy");
+        assert_eq!(saved["move_destination"], "/move");
+        assert_eq!(saved["recent"][0], "/recent");
+        assert_eq!(saved["favorites"][0], "/favorite");
+        std::fs::write(
+            &path,
+            r#"{"copy_destination":"","move_destination":"/move with space "}"#,
+        )
+        .unwrap();
+        let restored = load(&path).unwrap();
+        assert_eq!(restored.copy_destination, None);
+        assert_eq!(
+            restored.move_destination.as_deref(),
+            Some("/move with space ")
+        );
     }
 
     #[test]

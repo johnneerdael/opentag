@@ -319,7 +319,7 @@ const extendedTags=new ExtendedTags({
 });
 const fileOps=new FileOpsUI({
   invoke:(command,args)=>invoke(command,args),
-  pickDirectories:async(title,multiple)=>{const result=await open({directory:true,multiple,title});return result?Array.isArray(result)?result:[result]:[];},
+  pickDirectories:async(title,multiple,defaultPath)=>{const result=await open({directory:true,multiple,title,defaultPath});return result?Array.isArray(result)?result:[result]:[];},
   confirm:(text,title)=>title==='Delete files'||title==='Delete permanently'?messages.confirm('confirm_delete_files',text,title):title==='Unsaved changes'?messages.confirm('unsaved_changes',text,title):ask(text,{title,kind:'warning'}),
   selection:()=>paths().map(path=>({path,name:displayName(path)})),pendingCount:()=>drafts.size,
   load:(targets,options)=>loadPaths(targets,options),removeEntries,

@@ -40,6 +40,13 @@ existing destination folder is `/Practice/Harbour Lights`.
 The confirmation abbreviates long name lists; it is not a per-file rename
 preview. Check the full selection and destination yourself before accepting.
 
+After at least one file is copied successfully, the next **Copy files to…**
+dialog starts at that destination. **Move files to…** remembers its own
+destination separately. Both choices survive restarting OpenTag. Cancelling
+the picker or confirmation, or a transfer that moves/copies no files, keeps
+the previous choice. If preferences cannot be saved, the destination is
+remembered for the current session and the completed transfer still stands.
+
 The command retains the filename and extension. It places selected files
 **directly in the chosen folder**; it does not recreate the source folder
 tree. To create a metadata-derived folder layout, use

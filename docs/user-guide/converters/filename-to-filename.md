@@ -38,6 +38,26 @@ existing tag placeholders alongside the numbered parts. A part omitted
 from the new pattern is discarded from the name. Reusing a part there
 is allowed, for example `%2 - %2`.
 
+## Keep the audio extension
+
+Leaving the extension out of the new pattern is the simplest choice: the
+converter keeps the source extension automatically. If the new pattern
+already ends in that same extension, ignoring upper/lowercase, it appears
+only once.
+
+For source `song.mp3` and **Old filename pattern** `%1`:
+
+| Input filename | Old filename pattern | New filename pattern | Result |
+|---|---|---|---|
+| `song.mp3` | `%1` | `%1` | `song.mp3` |
+| `song.mp3` | `%1` | `%1.mp3` | `song.mp3` |
+| `song.mp3` | `%1` | `%1.MP3` | `song.MP3` |
+| `song.mp3` | `%1` | `%1.flac` | `song.flac.mp3` |
+
+A different suffix becomes part of the name, followed by the source extension.
+The audio data stays in its original format. Check **Preview** for an
+unwanted extra suffix before applying the rename.
+
 ## Read and create folders
 
 Backslashes in the old pattern mark folder boundaries. For example:

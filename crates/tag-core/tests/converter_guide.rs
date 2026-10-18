@@ -101,7 +101,7 @@ fn filename_rearrangement_table_runs_its_written_old_and_new_patterns() {
         assert_eq!(result.target, inline(row[3]), "{line}");
         count += 1;
     }
-    assert_eq!(count, 4);
+    assert_eq!(count, 8);
 }
 
 #[test]

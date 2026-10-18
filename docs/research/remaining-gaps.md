@@ -1,6 +1,6 @@
 # Remaining parity gaps versus Mp3tag 3.36.1
 
-Baseline as of 2026-10-17 at `main` `9d3764b`; the Find entry is updated by the [2026-10-18 automation verification](../verification/automation-parity-2026-10-18.md). This register lists the known open items. It is built from audits and verification notes and is not an exhaustive proof. Everything the 2026-10-15 audit found that later batches closed has been removed; the closing evidence lives in the [verification notes](../verification/). The [parity ledger](../PARITY.md) summarises this list.
+Baseline as of 2026-10-17 at `main` `9d3764b`; the Find entry is updated by the [2026-10-18 automation verification](../verification/automation-parity-2026-10-18.md). Destination memory and three previously implemented file/tag-panel capabilities are reconciled against approved main `696e419` in the [transfer-destination verification](../verification/transfer-destinations-2026-10-18.md). This register lists the known open items. It is built from audits and verification notes and is not an exhaustive proof. Everything the 2026-10-15 audit found that later batches closed has been removed; the closing evidence lives in the [verification notes](../verification/). The [parity ledger](../PARITY.md) summarises this list.
 
 Method: the original audit compared every documentation page against the code. On 2026-10-17 the Windows binary's own tables were checked as well: script function names, placeholder names, field names, toolbar command ids and persisted setting names. Nothing was launched. "Unverified" means the behaviour is not documented and has not been compared with the original.
 
@@ -28,9 +28,8 @@ Legend: **Impact** H = daily tagging, M = regular, L = rare or legacy. **Size** 
 | Actions | Convert Codepage default | Action group dialogs start at 1251 instead of the last choice (`src/action-ui.ts:285`) | L | S |
 | Actions | `.mta` type IDs | Adjust Cover, Set Cover Properties and Generate Playlists export with TagGroove-only type IDs 1001 to 1003 (`crates/tag-core/src/actions.rs`); Mp3tag lists them as unknown actions | M | M |
 | Actions | Mobile provider documents | File, cover-file and rename actions refused (`managed_actions.rs`) | L | L |
-| Converters | Filename → Filename with an extension in the pattern | The extension is appended again | L | S |
+| Converters | Filename → Filename with a nonmatching explicit suffix | A suffix matching the source extension is deduplicated case-insensitively, but a different suffix still receives the original extension (`song.mp3` with old pattern `%1` and new pattern `%1.flac` becomes `song.flac.mp3`). Original behavior for nonmatching suffixes remains unverified | L | S |
 | Converters | Text File → Tag record-count mismatch | Any mismatch refuses the import; the original applies records in order | L | M |
-| File operations | Last Copy/Move destination | The folder picker does not reopen at the last destination (`src/file-ops.ts:186`) | L | S |
 | File operations | Associated `.lrc` and `.cdg` files | Not renamed or moved with the audio file | L | M |
 | Formats | TAK and OptimFROG | Implemented on a stand-in; only hand-built fixtures, no real-encoder files | L | S |
 | Formats | Nero details | `udta/indx` kept but not shown or edited; covers always written to `covr`; a longer value for a Nero-held field in an MP4 file without chapters reaches only the iTunes tag ([formats-gaps](../verification/formats-gaps.md)) | L | S |
@@ -58,7 +57,7 @@ Legend: **Impact** H = daily tagging, M = regular, L = rare or legacy. **Size** 
 | Covers | Linux drag-out | The GTK drag source writes `file://` URIs without percent-encoding, so temporary names are limited to ASCII letters, digits and `-_.()` | L | S |
 | File list | Inline rename and order | Inline filename edits cannot move a file to another folder; manual order is not kept across sessions; save-on-move is not triggered by cell-editor Enter/Tab, Find, Select all or Select directory; Refresh reports an error for a file added individually and later renamed | L | M |
 | File operations | Details | Play opens each file separately with no temporary playlist; the native folder dialog has no subfolders checkbox; macOS uses Ctrl+H and Ctrl+M for Add and Favorite directory because ⌘H and ⌘M are reserved | L | S |
-| Tag panel | Details | The directory switcher does not change the working directory and takes no typed path; defaults are filled on multi-select only through the explicit command; format-string fields are not implemented | L | M |
+| Tag panel | Details | The directory dropdown selects entries in the listed folder rather than changing the working directory; format-string fields are not implemented. Typed-directory Enter and automatic multi-selection defaults are already implemented (`tag-panel.ts:139,315`, `main.ts:1047`) | L | M |
 | Toolbars | Custom toolbar | Buttons are text labels with no symbol choice and none for individual tag sources; Mp3tag `toolbar.ini` and `toolbar_custom.ini` are not imported | L | M |
 | Tools | Default tool | Selecting "No action" for the default tool still opens Extended Tags on a file-list double-click; tools receive path placeholders only, `.lnk` and `.bat` forms are not special-cased, and a per-file launch is capped at 100 files | L | S |
 | Sources | freedb | "Current list of freedb servers" restores two built-in entries instead of fetching a current list; artist/album and artwork search is limited to `gnudb.org` hosts and local lookups are exact | M | M |
@@ -112,3 +111,9 @@ Source: strings from `Mp3tag.exe`, compared with the code.
 - Field names: the 99 names in the Fields menu table are in the mapping registry.
 - Toolbar command ids: 75 in the binary against 28 in TagGroove (first row above).
 - Persisted setting names: about 60 checked; the unmatched ones are listed under Settings and File operations.
+
+## 2026-10-18 ledger reconciliation
+
+- Filename → Filename already deduplicates an explicitly included suffix when it matches the source extension, ignoring case (`crates/tag-core/src/converters.rs`, `ends_with_extension`). This corrects the earlier broad missing-feature claim. A nonmatching suffix still gets the source extension appended; that narrower case remains in the register, with original runtime comparison open.
+- Typed-directory Enter and automatic defaults for multi-selection already exist and are connected. The remaining Tag Panel row keeps the separate dropdown-selection and format-string-field limits.
+- Copy and Move now retain separate last-successful destinations in `directories.json`; cancellation and wholly failed operations retain the previous choice. See [the bounded verification receipt](../verification/transfer-destinations-2026-10-18.md). Native dialog interaction and original timing are not claimed from the unit tests.
