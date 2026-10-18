@@ -1,0 +1,62 @@
+{
+  "provenance": "Independently authored metadata on the frozen tone.mp3 carrier. Native Lofty frame constructors seed the fixture; a separate raw ID3 envelope reader observes owner/group/payload bytes. No original-app output or player-scale equivalence is asserted.",
+  "version": 3,
+  "text_encoding": "UTF-16",
+  "popularimeters": [
+    {
+      "owner": "Windows Media Player 9 Series",
+      "rating": 196,
+      "counter": 17
+    },
+    {
+      "owner": "no@email",
+      "rating": 118,
+      "counter": 23
+    },
+    {
+      "owner": "listener@example.invalid",
+      "rating": 201,
+      "counter": 72623859790382856
+    }
+  ],
+  "lyrics": [
+    {
+      "language": "eng",
+      "description": "Verse",
+      "text": "Line one\nLine two café"
+    },
+    {
+      "language": "deu",
+      "description": "Übersetzung",
+      "text": "Zeile eins\nZeile zwei"
+    }
+  ],
+  "unique_file_id": {
+    "owner": "https://example.invalid/taggroove-opaque",
+    "identifier_base64": "AP8BAgA="
+  },
+  "covers": [
+    {
+      "description": "front-primary",
+      "image_index": 0,
+      "picture_type": 3,
+      "image_sha256": "0f7765869d223939f02d7dd514fb591face3ce6f938e944d95762ed6c2184979"
+    },
+    {
+      "description": "front-alternate",
+      "image_index": 1,
+      "picture_type": 3,
+      "image_sha256": "29dec9c496efba13b674446e3c0d377f7969dd944dff620744f5d6f72bda8205"
+    }
+  ],
+  "expected_native_body_sha256": {
+    "POPM|Windows Media Player 9 Series": "13ca1cd7e41f0504b6f984181c8ed948a5d3d7dc9d3b69ecac1ba9e221c5a21d",
+    "POPM|no@email": "377a13511bd339f10e8a66c88c5e7f7f74164229e2abbd0c67950b9434bf6437",
+    "POPM|listener@example.invalid": "94ac7c25f970299da7cf718e3db8c26044df28d651420d22edb52628605d8a4c",
+    "USLT|eng|Verse": "78d6be7f6b6080bed8d6e3ac3d5867062ef56d87705302f569a5f64f96bddf03",
+    "USLT|deu|Übersetzung": "59fdeac0e2fcb35937799cb092ade9002d506c69e7026ba69d6fa404732208a4",
+    "UFID|https://example.invalid/taggroove-opaque": "3b07f3af3c201803ed1cb0f3f19a754ccf7b2989c7b93b985a224dd453cacf69",
+    "APIC|front-primary": "2e033055138ea623e78055ee386027b1fdefc83d5221e10759b7df7476c4bb94",
+    "APIC|front-alternate": "51ac49d142ecb3029bbdcc766bd2b1624c195d56fc7b4cf0092618d79e3944d3"
+  }
+}

@@ -87,6 +87,16 @@ A broad keep-list action can erase loudness fields that are not listed.
 `MP3GAIN_UNDO` is another tool's restoration information, not a ReplayGain
 track gain or TagGroove's **Edit → Undo** history. Preserve it when needed.
 
+The storage location matters as well as the displayed text. With the default
+MPEG policy, an ordinary save removes an existing APE tag while writing ID3.
+Copied `MP3GAIN_` text in ID3 does not establish that a gain tool expecting
+APEv2 can still use its restoration information. For a workflow that needs
+the native APE fields, enable **Write APEv2** under **Tags → Mpeg** before
+saving a disposable copy, then verify the result with that gain tool.
+Writing both tag types synchronizes their displayed fields; it does not
+preserve independently conflicting titles. The core preservation checks
+verify native APE gain fields and undo, but do not execute MP3Gain itself.
+
 ## What this means in TagGroove
 
 Before cleaning tags, inspect the actual tag families and stored field names,
